@@ -545,6 +545,13 @@ body.overview:not(.measuring) .copy-btn { display: none; }
 .slide table.rules tr.sep td { border-bottom: 2px solid var(--line); }
 
 /* 行番号つきの形式証明（Fitch 流） */
+/* 無矛盾性のスライド：2 つの箱を詰めて組む */
+.cols.consist { gap: 20px; align-items: stretch; }
+.cols.consist .box { margin-bottom: 8px; padding: 8px 14px; }
+.cols.consist .box h3 { font-size: .9em; }
+.cols.consist .box ul { font-size: .78em; line-height: 1.45; }
+.cols.consist .box li { margin-bottom: 3px; }
+
 /* 証明図（Gentzen 式の横線）．式の位置は deck.js の layoutProofTrees が決める */
 .ptree { position: relative; margin: 0 auto; font-size: 20px; line-height: 1.3; }
 .ptree .f, .ptree .r { position: absolute; white-space: nowrap; }
