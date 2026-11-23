@@ -2638,45 +2638,46 @@ theorem riemannHypothesis : RiemannHypothesis := by sorry</code></pre>
 </section>
 
 <section class="slide">
-  <h2>独自の検証：RIKYU と AI の使い方</h2>
+  <h2>独自の検証：RIKYU で実行した記録</h2>
   <div class="cols c32">
     <div>
-      <p class="small">公開されたライブラリを，我々自身でビルドし，検査した記録（<a href="https://shosonoda.github.io/lean-rh-alpoge/">レポート</a>，<a href="https://github.com/shosonoda/lean-rh-alpoge">リポジトリ</a>）．
-        実行して確認できたことだけを報告し，数学的な内容は評価しない．</p>
+      <p class="small">公開されたライブラリを，我々自身でビルドし，検査した記録（<a href="https://shosonoda.github.io/lean-rh-alpoge/">公開レポート</a>）．
+        何を実行し，どのような結果が出たかだけを報告し，数学的な内容は評価しない．</p>
       <table class="full compact">
         <thead><tr><th>工程</th><th>内容</th><th>結果<span class="muted">（2026-11-23 版）</span></th></tr></thead>
         <tbody>
-          <tr><td>1</td><td><code>lake build</code><br><span class="muted">RIKYU の 1 ノード，64 コア</span></td>
-            <td><span class="tag ok">完了</span> 終了コード 0．175,187 モジュール，エラー 0，<code>sorry</code> 0．約 6 時間 20 分</td></tr>
-          <tr><td>2</td><td>単体の Comparator v4.33.0<br><span class="muted">サンドボックス内で再ビルドから</span></td>
-            <td><span class="tag warn">未完了</span> エクスポートは 61.6 GB．メモリ約 300 GiB，単一スレッドの段階が続き，判定は出ていない</td></tr>
+          <tr><td>1</td><td><code>lake build</code><br><span class="muted">RIKYU の 1 ノード．主なジョブは 64 スレッド</span></td>
+            <td><span class="tag ok">完了</span> 終了コード 0．175,187 モジュール，エラー行 0，<code>sorry</code> の警告 0．3 つのジョブで計 6 時間 54 分</td></tr>
+          <tr><td>2</td><td>単体の Comparator v4.33.0<br><span class="muted">サンドボックス内で再ビルドから．チャレンジは我々が書いたもの</span></td>
+            <td><span class="tag warn">未完了</span> 再ビルドとエクスポートは済み．単一スレッドの段階が続いている（メモリ 297 GiB）．判定は出ていない</td></tr>
           <tr><td>公式<br>手順</td><td>コミュニティの手順<br><span class="muted">2 つのエクスポートを <code>lake comparator</code>（Lean 4.36.0）で判定</span></td>
-            <td><span class="tag warn">実行中</span> エクスポートの SHA-256 は公表値と一致．nanoda：受理（1 時間 58 分）．Lean の既定カーネル：実行中</td></tr>
+            <td><span class="tag warn">実行中</span> エクスポートの SHA-256 は公表値と一致．nanoda：受理（1 時間 58 分）．Lean の既定カーネル：実行中．Lean paranoid：このノードでは起動できず</td></tr>
           <tr><td>3</td><td>証明ネットワークの統計<br><span class="muted">独自の依存グラフ解析</span></td>
-            <td><span class="tag ok">完了</span> 定数 270 万個．5 定理が依存するのは 148 万個．公理は標準の 3 つだけ</td></tr>
+            <td><span class="tag ok">完了</span> 定数 270 万個（うちプロジェクト 191 万個）．5 定理が依存するのは 148 万個．公理は標準の 3 つだけ</td></tr>
         </tbody>
       </table>
-      <p class="note">計算資源：割り当て 64 GPU 時間（約 1.9 万円．GPU 自体は使わず，CPU とメモリを使用）．最新の状況は公開レポートを参照．</p>
+      <p class="note">計算資源：試行を除いた 1 回分（ビルドと解析）は 14.93 GPU 時間（4,480 円）．試行と未完了の実行を含む全ジョブでは 64.06 GPU 時間（19,219 円）．
+        Lean は GPU を使わない（GPU 時間は，この計算機の課金の単位）．最新の状況は公開レポートを参照．</p>
     </div>
     <div>
       <div class="box plain small">
-        <h3>RIKYU（理研 R-CCS の計算機）の使い方</h3>
+        <h3>RIKYU（理研 R-CCS）での実行</h3>
         <ul class="mb0">
-          <li>ビルドは並列化できる（64 スレッドで数時間）</li>
-          <li>エクスポートとカーネルの再検査は<strong>単一スレッド</strong>で<strong>数百 GB のメモリ</strong>を使う．効くのはコア数よりメモリ</li>
-          <li>制限時間のあるジョブを，途中結果を保存してつなぐ</li>
+          <li>ノード：72 コアの Arm CPU が 2 基，メモリ 1,691 GiB</li>
+          <li>ビルド：64 スレッドで，約 17 万モジュールを 6 時間 24 分</li>
+          <li>エクスポート：1 スレッドで 1 時間 21 分．最大メモリ 162.6 GiB，出力 61.6 GB</li>
         </ul>
       </div>
       <div class="box info small">
-        <h3>AI の使い方</h3>
+        <h3>この報告が示すこと・示さないこと</h3>
         <ul class="mb0">
-          <li>コーディングエージェント（Claude Code）が，ジョブの作成と投入，ログの集計，依存グラフの解析，レポートの生成までを担当</li>
-          <li>人間は方針を決め，公開する文面を確認する</li>
+          <li>ビルドがエラー 0 件で完了し，かつ Comparator が受理すれば，5 個の定理は許可した公理から Lean の論理で導かれている</li>
+          <li>人間による証明の査読ではない．数学的内容が正しいとも誤っているとも主張しない</li>
         </ul>
       </div>
       <div class="box key small">
         <strong>教訓</strong>：読むべき主張は数行．1,755 万行を読むのはカーネル．
-        ただし<strong>検査そのものが大規模計算</strong>になる．
+        ただし<strong>検査そのものが大きな計算</strong>になる．
       </div>
     </div>
   </div>
@@ -2719,7 +2720,7 @@ theorem riemannHypothesis : RiemannHypothesis := by sorry</code></pre>
       <ul class="small">
         <li>Mathlib：定理 29.6 万，貢献者 772 人．人間が査読するので成長は概ね線形．AI による開発は Tau Ceti，Lean Pool，Prove2Me などで進む</li>
         <li>Lean Rademacher（汎化誤差），Lean Ridgelet（再構成公式）：形式化の過程で，隠れた仮定が明らかになり，新しい定理も得られた</li>
-        <li>FLT，Navier–Stokes，Riemann 予想：AI が書いた数万〜数十万モジュールを，<strong>Mathlib だけで書いた短い主張</strong>に対して検査する</li>
+        <li>FLT，Navier–Stokes，Riemann 予想：数万〜数十万モジュールの証明を，<strong>Mathlib だけで書いた短い主張</strong>に対して検査する</li>
       </ul>
     </div>
   </div>
