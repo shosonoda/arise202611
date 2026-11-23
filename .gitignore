@@ -1,0 +1,6 @@
+# rendered output of the former Marp deck
+dist/
+# private notes and reference data
+00note/
+00data/
+.DS_Store

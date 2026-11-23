@@ -1,0 +1,2776 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leanによる形式数学入門 — 他人が書いた Lean の証明を，なぜ・いつ信じられるか</title>
+<meta name="author" content="園田 翔">
+<link rel="stylesheet" href="deck/katex/katex.min.css">
+<link rel="stylesheet" href="deck/deck.css">
+<!--
+  編集の手引き
+  - 1 枚のスライドは <section class="slide"> … </section>．見出しは <h2>．
+  - 章の扉は <section class="slide divider">．以降のスライドの左下に章名が出る．
+  - 段組は <div class="cols">（c32, c23, c21, c12, c3 などで比率を変える）．
+  - コードは <pre><code class="language-lean"> … </code></pre>．読み込み時に色が付く．
+    コードの中の < と & は &lt; &amp; と書く．<pre data-hl="2,4-6"> で行を強調．
+    文字を小さくするには <pre class="s">, "xs", "xxs"．
+    コードブロックには「コピー」ボタンが自動で付く（付けたくないときは <pre data-nocopy>）．
+    1 行目が長いブロックでは，文字を隠さないよう，マウスを置いたときだけボタンが出る．
+    見出しや文中でも <code class="language-bash">…</code> と書けば色が付く．
+  - 数式は $…$ と $$…$$（KaTeX）．数式の中の < は \lt と書く．
+  - キー操作: ← → 移動，O 一覧（はみ出したスライドに赤い印），F 全画面，[ ] 証明ステップ．
+  - PDF にするにはブラウザの印刷（用紙サイズは自動で 16:9）．
+  - 表紙の版（v2026.11.23 の形）は，内容を更新したら書き換える．
+-->
+</head>
+<body>
+<main class="deck">
+
+<!-- ======================================================================
+     表紙
+     ====================================================================== -->
+
+<section class="slide title">
+  <h1>Leanによる形式数学入門</h1>
+  <div class="subtitle">他人が書いた Lean の証明を，なぜ・いつ信じられるか</div>
+  <div class="author">園田 翔</div>
+  <div class="affil">理化学研究所 AIP ／ サイバーエージェント</div>
+  <div class="date">v2026.11.23</div>
+</section>
+
+<section class="slide">
+  <h2>今日の内容</h2>
+  <div class="cols c32">
+    <div>
+      <ol class="small">
+        <li><strong>形式証明の仕組み</strong><br>
+          <span class="muted">証明の行間を埋める，自然演繹の推論規則，Curry–Howard 対応，タクティック</span></li>
+        <li><strong>Lean の仕組み</strong><br>
+          <span class="muted">定義・定理・証明の書き方，型と項，Lean の中で起きていること，定義的等価</span></li>
+        <li><strong>なぜ・いつ信頼できるか</strong><br>
+          <span class="muted">カーネルと公理，「コンパイルが通った」の意味，ジャンク値，<code>lake comparator</code></span></li>
+        <li><strong>AI を使わない形式化</strong><br>
+          <span class="muted">環境構築，<code>lake new … math</code>，日々の作業，Mathlib の読み方</span></li>
+        <li><strong>AI を使った形式化</strong><br>
+          <span class="muted">LeanArchitect と Comparator を使うように指示して，待つ</span></li>
+        <li><strong>具体例</strong><br>
+          <span class="muted">物理数学（正準交換関係，分配関数，Fourier 変換），制御理論（Lyapunov 関数，線形系）</span></li>
+        <li><strong>実際の形式化事例</strong><br>
+          <span class="muted">Mathlib と AI による開発，Lean Rademacher，Lean Ridgelet，Fermat の最終定理，Navier–Stokes，Physlib，Riemann 予想の検証</span></li>
+      </ol>
+    </div>
+    <div>
+      <div class="box key info">
+        <h3>この講義の問い</h3>
+        <p class="small mb0"><strong>他人（や AI）が書いた Lean の証明を，なぜ・いつ信じてよいのか．</strong></p>
+      </div>
+      <div class="box plain">
+        <h3>持ち帰ってほしいこと</h3>
+        <ul class="small mb0">
+          <li>形式証明は，証明の行間を<em>推論規則だけ</em>で埋めたもの．検査は機械的な計算（<em>型検査</em>）になる</li>
+          <li>信頼すべきものは小さい：<em>カーネル</em>，<em>公理</em>，<em>定理の主張</em></li>
+          <li>だから証明は読まなくてよい．人間は「主張が意図どおりか」を読む</li>
+        </ul>
+      </div>
+      <p class="note">Lean を「書ける」ようになるには時間がかかるので，今日は「読める・確かめられる」ことを目標にする．<br>
+        スライド中の Lean コードは <strong>Lean 4.36.0 / Mathlib v4.36.0</strong> で動作を確認した（2026-11-23）．各プロジェクトから引用したコードは，それぞれのリポジトリが固定している版のもの．</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     1. 形式証明の仕組み
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">1</div>
+  <h2>形式証明の仕組み</h2>
+  <p>証明の行間を，推論規則だけで埋める．原理的には，紙と鉛筆でできる</p>
+</section>
+
+<section class="slide">
+  <h2>形式証明とは：証明の「行間」を埋める方法</h2>
+  <div class="cols">
+    <div>
+      <div class="box plain">
+        <h3>ふつうの証明（教科書・論文）</h3>
+        <p class="small mb0"><strong>命題．</strong>偶数と偶数の和は偶数である．<br>
+          <strong>証明．</strong>$m = 2a$，$n = 2b$ <span class="gapword">と書ける</span>．<span class="gapword">すると</span> $m + n = 2(a + b)$．<span class="gapword">よって</span> $m + n$ は偶数．$\blacksquare$</p>
+      </div>
+      <ul class="small">
+        <li>色を付けた言葉の裏に，書かれていない推論がある（<strong>行間</strong>）．「明らかに」「同様に」「計算すると」も同じ</li>
+        <li>行間が正しく埋まるかどうかの判断は，読者（査読者）に委ねられている</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box info">
+        <h3>形式証明</h3>
+        <p class="small mb0"><strong>主張</strong>と<strong>公理</strong>（および定義，すでに示した定理）を，あらかじめ決めた<strong>推論規則だけ</strong>でつないだもの．行間が 1 つも残っていない証明．</p>
+      </div>
+      <ul class="small">
+        <li>推論規則は，十数個の決まった型<span class="muted">（次ページ：<strong>自然演繹</strong>）</span></li>
+        <li>各ステップで「どの規則を，どこに使ったか」まで書く．それ以外の飛躍は許されない</li>
+      </ul>
+    </div>
+  </div>
+  <svg viewBox="0 0 1168 188" role="img" aria-label="ふつうの証明の行間と，形式証明での推論規則の列" style="width: 100%; margin: 2px 0 8px 0;">
+  <defs><marker id="ga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f5fbf"/></marker><marker id="gb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b98400"/></marker></defs>
+  <text class="t-body" x="0" y="63" font-size="16" font-weight="700" fill="#1b1d21">ふつうの証明</text>
+  <text class="t-body" x="0" y="155" font-size="16" font-weight="700" fill="#1f5fbf">形式証明</text>
+  <line x1="190" y1="70" x2="190" y2="138" stroke="#d9dde3" stroke-width="1.5" stroke-dasharray="3 4"/>
+  <line x1="490" y1="70" x2="490" y2="138" stroke="#d9dde3" stroke-width="1.5" stroke-dasharray="3 4"/>
+  <line x1="790" y1="70" x2="790" y2="138" stroke="#d9dde3" stroke-width="1.5" stroke-dasharray="3 4"/>
+  <line x1="1090" y1="70" x2="1090" y2="138" stroke="#d9dde3" stroke-width="1.5" stroke-dasharray="3 4"/>
+  <path d="M202,58 Q340.0,14 477,55" fill="none" stroke="#b98400" stroke-width="2.2" stroke-dasharray="7 6" marker-end="url(#gb)"/>
+  <rect x="294.0" y="13" width="92" height="24" rx="4" fill="#fff3c4" stroke="#e0a800"/>
+  <text class="t-body" x="340.0" y="30" font-size="14.5" text-anchor="middle" fill="#1b1d21">「と書ける」</text>
+  <path d="M502,58 Q640.0,14 777,55" fill="none" stroke="#b98400" stroke-width="2.2" stroke-dasharray="7 6" marker-end="url(#gb)"/>
+  <rect x="594.0" y="13" width="92" height="24" rx="4" fill="#fff3c4" stroke="#e0a800"/>
+  <text class="t-body" x="640.0" y="30" font-size="14.5" text-anchor="middle" fill="#1b1d21">「すると」</text>
+  <path d="M802,58 Q940.0,14 1077,55" fill="none" stroke="#b98400" stroke-width="2.2" stroke-dasharray="7 6" marker-end="url(#gb)"/>
+  <rect x="894.0" y="13" width="92" height="24" rx="4" fill="#fff3c4" stroke="#e0a800"/>
+  <text class="t-body" x="940.0" y="30" font-size="14.5" text-anchor="middle" fill="#1b1d21">「よって」</text>
+  <circle cx="190" cy="58" r="8" fill="#4a4f57"/>
+  <text class="t-body halo" x="190" y="88" font-size="14.5" text-anchor="middle" fill="#1b1d21">m，n は偶数</text>
+  <circle cx="490" cy="58" r="8" fill="#4a4f57"/>
+  <text class="t-body halo" x="490" y="88" font-size="14.5" text-anchor="middle" fill="#1b1d21">m = 2a，n = 2b</text>
+  <circle cx="790" cy="58" r="8" fill="#4a4f57"/>
+  <text class="t-body halo" x="790" y="88" font-size="14.5" text-anchor="middle" fill="#1b1d21">m + n = 2(a + b)</text>
+  <circle cx="1090" cy="58" r="8" fill="#4a4f57"/>
+  <text class="t-body halo" x="1090" y="88" font-size="14.5" text-anchor="middle" fill="#1b1d21">m + n は偶数</text>
+  <line x1="200.0" y1="150" x2="243.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="220.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">定義</text>
+  <circle cx="250.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="256.0" y1="150" x2="303.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="280.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∃ 除去</text>
+  <circle cx="310.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="316.0" y1="150" x2="363.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="340.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∃ 除去</text>
+  <circle cx="370.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="376.0" y1="150" x2="423.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="400.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">＝ 導入</text>
+  <circle cx="430.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="436.0" y1="150" x2="479.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="460.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">＝ 除去</text>
+  <line x1="500.0" y1="150" x2="543.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="520.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">＝ 除去</text>
+  <circle cx="550.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="556.0" y1="150" x2="603.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="580.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">公理</text>
+  <circle cx="610.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="616.0" y1="150" x2="663.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="640.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∀ 除去</text>
+  <circle cx="670.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="676.0" y1="150" x2="723.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="700.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">＝ 除去</text>
+  <circle cx="730.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="736.0" y1="150" x2="779.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="760.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">＝ 除去</text>
+  <line x1="800.0" y1="150" x2="843.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="820.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∃ 導入</text>
+  <circle cx="850.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="856.0" y1="150" x2="903.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="880.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∃ 除去</text>
+  <circle cx="910.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="916.0" y1="150" x2="963.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="940.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∃ 除去</text>
+  <circle cx="970.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="976.0" y1="150" x2="1023.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="1000.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">→ 導入</text>
+  <circle cx="1030.0" cy="150" r="3.5" fill="#fff" stroke="#1f5fbf" stroke-width="1.6"/>
+  <line x1="1036.0" y1="150" x2="1079.0" y2="150" stroke="#1f5fbf" stroke-width="2" marker-end="url(#ga)"/>
+  <text class="t-body" x="1060.0" y="141" font-size="11.5" text-anchor="middle" fill="#1f5fbf">∀ 導入</text>
+  <circle cx="190" cy="150" r="8" fill="#1f5fbf"/>
+  <circle cx="490" cy="150" r="8" fill="#1f5fbf"/>
+  <circle cx="790" cy="150" r="8" fill="#1f5fbf"/>
+  <circle cx="1090" cy="150" r="8" fill="#1f5fbf"/>
+  <text class="t-body" x="640.0" y="180" font-size="13.5" text-anchor="middle" fill="#4a4f57">矢印 1 本が，推論規則 1 回の適用．規則の形に合っているかどうかは，機械的に確かめられる</text>
+  </svg>
+  <div class="box key info center small"><strong>形式化 ＝ 行間をすべて，推論規則の適用に置き換えること．</strong>
+    数学の内容は変わらない．同じ証明を，機械的に検査できる細かさまで書き下す．</div>
+</section>
+
+<section class="slide">
+  <h2>自然演繹の推論規則 (1)：命題論理</h2>
+  <p class="small">$\Gamma \vdash P$ は「仮定の集まり $\Gamma$ のもとで $P$ が導ける」と読む．横線の上が前提，下が結論．
+    記号ごとに，<strong>導入規則</strong>（その形の命題の示し方）と<strong>除去規則</strong>（使い方）がある．</p>
+  <table class="full rules">
+    <thead><tr><th></th><th>規則</th><th>図式</th><th>数学での言い回し（例）</th></tr></thead>
+    <tbody>
+      <tr><td class="sym" rowspan="2">$\to$</td><td class="nm">$\to$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma,\ P \vdash Q}{\Gamma \vdash P \to Q}$</td>
+        <td>「$n$ は偶数と<strong>仮定する</strong>．…ゆえに $n^2$ は偶数」と書いて，「$n$ が偶数ならば $n^2$ も偶数」を示す</td></tr>
+      <tr class="sep"><td class="nm">$\to$ 除去<small>三段論法</small></td>
+        <td class="fig">$\dfrac{\Gamma \vdash P \to Q \quad \Gamma \vdash P}{\Gamma \vdash Q}$</td>
+        <td>「微分可能ならば連続である．$f$ は微分可能である．<strong>ゆえに</strong> $f$ は連続である」</td></tr>
+      <tr><td class="sym" rowspan="2">$\land$</td><td class="nm">$\land$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma \vdash P \quad \Gamma \vdash Q}{\Gamma \vdash P \land Q}$</td>
+        <td>「$f$ は単射<strong>かつ</strong>全射」を示すには，単射性と全射性をそれぞれ示す</td></tr>
+      <tr class="sep"><td class="nm">$\land$ 除去</td>
+        <td class="fig">$\dfrac{\Gamma \vdash P \land Q}{\Gamma \vdash P}\quad \dfrac{\Gamma \vdash P \land Q}{\Gamma \vdash Q}$</td>
+        <td>「$f$ は全単射である．<strong>特に</strong>単射である」</td></tr>
+      <tr><td class="sym" rowspan="2">$\lor$</td><td class="nm">$\lor$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma \vdash P}{\Gamma \vdash P \lor Q}\quad \dfrac{\Gamma \vdash Q}{\Gamma \vdash P \lor Q}$</td>
+        <td>「$x &gt; 0$ である．<strong>したがって</strong> $x \ge 0$（$x &gt; 0$ または $x = 0$）である」</td></tr>
+      <tr class="sep"><td class="nm">$\lor$ 除去<small>場合分け</small></td>
+        <td class="fig">$\dfrac{\Gamma \vdash P \lor Q \quad \Gamma,\ P \vdash R \quad \Gamma,\ Q \vdash R}{\Gamma \vdash R}$</td>
+        <td>「$x \ge 0$ の<strong>とき</strong>…．$x &lt; 0$ の<strong>とき</strong>…．<strong>いずれの場合も</strong> $|x| \ge x$」</td></tr>
+      <tr><td class="sym" rowspan="2">$\lnot$</td><td class="nm">$\lnot$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma,\ P \vdash \bot}{\Gamma \vdash \lnot P}$</td>
+        <td>「$\sqrt2$ が有理数であると仮定すると<strong>矛盾する</strong>．ゆえに $\sqrt2$ は有理数でない」</td></tr>
+      <tr class="sep"><td class="nm">矛盾<small>$\lnot$ 除去，$\bot$ 除去</small></td>
+        <td class="fig">$\dfrac{\Gamma \vdash P \quad \Gamma \vdash \lnot P}{\Gamma \vdash \bot}\quad \dfrac{\Gamma \vdash \bot}{\Gamma \vdash Q}$</td>
+        <td>「これは仮定に<strong>矛盾する</strong>」．矛盾（$\bot$）からは，どんな命題も導ける</td></tr>
+      <tr><td class="sym"></td><td class="nm">背理法<small>古典論理</small></td>
+        <td class="fig">$\dfrac{\Gamma,\ \lnot P \vdash \bot}{\Gamma \vdash P}$</td>
+        <td>「解が存在しないと仮定すると矛盾する．<strong>ゆえに解は存在する</strong>」<span class="muted">（$\lnot$ 導入と違い，肯定の命題が出る）</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="slide">
+  <h2>自然演繹の推論規則 (2)：述語論理と等号</h2>
+  <table class="full rules">
+    <thead><tr><th></th><th>規則</th><th>図式</th><th>数学での言い回し（例）</th></tr></thead>
+    <tbody>
+      <tr><td class="sym" rowspan="2">$\forall$</td><td class="nm">$\forall$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma \vdash P(x)}{\Gamma \vdash \forall x,\ P(x)}$<span class="muted">　$x$ は $\Gamma$ に現れない</span></td>
+        <td>「$\varepsilon &gt; 0$ を<strong>任意にとる</strong>．…」と書いて，「任意の $\varepsilon &gt; 0$ に対して…」を示す</td></tr>
+      <tr class="sep"><td class="nm">$\forall$ 除去</td>
+        <td class="fig">$\dfrac{\Gamma \vdash \forall x,\ P(x)}{\Gamma \vdash P(t)}$</td>
+        <td>「すべての $x$ で $f(x) \le M$．<strong>特に</strong> $x = 0$ として $f(0) \le M$」</td></tr>
+      <tr><td class="sym" rowspan="2">$\exists$</td><td class="nm">$\exists$ 導入</td>
+        <td class="fig">$\dfrac{\Gamma \vdash P(t)}{\Gamma \vdash \exists x,\ P(x)}$</td>
+        <td>「$6 = 2 \cdot 3$．ゆえに $6 = 2k$ となる $k$ が存在する」（$k = 3$ <strong>ととればよい</strong>）</td></tr>
+      <tr class="sep"><td class="nm">$\exists$ 除去</td>
+        <td class="fig">$\dfrac{\Gamma \vdash \exists x,\ P(x) \quad \Gamma,\ P(c) \vdash R}{\Gamma \vdash R}$<span class="muted">　$c$ は新しい変数</span></td>
+        <td>「$n$ は偶数だから，$n = 2k$ となる $k$ を <strong>1 つとる</strong>．…」</td></tr>
+      <tr><td class="sym" rowspan="2">$=$</td><td class="nm">$=$ 導入<small>反射律</small></td>
+        <td class="fig">$\dfrac{}{\ \Gamma \vdash t = t\ }$</td>
+        <td>「$t = t$」（同じものは等しい）</td></tr>
+      <tr><td class="nm">$=$ 除去<small>代入</small></td>
+        <td class="fig">$\dfrac{\Gamma \vdash s = t \quad \Gamma \vdash P(s)}{\Gamma \vdash P(t)}$</td>
+        <td>「$m = 2a$ を<strong>代入して</strong>，$m + n = 2a + n$」</td></tr>
+    </tbody>
+  </table>
+  <div class="cols c3 mt">
+    <div class="box plain small">
+      <h3>導入と除去</h3>
+      <strong>導入規則</strong>は，その形の命題の「示し方」．<strong>除去規則</strong>は，その形の命題の「使い方」．
+      証明を読み書きするとき，無意識に使い分けている．
+    </div>
+    <div class="box plain small">
+      <h3>規則はこれで全部</h3>
+      2 ページで十数個．数学の証明は，どれほど長くても，原理的には<strong>これらの組み合わせ</strong>に分解できる．
+    </div>
+    <div class="box plain small">
+      <h3>出発点は公理と定義</h3>
+      自然数の公理（帰納法を含む），実数の公理，集合論や型理論の公理．
+      既知の定理は，すでに公理とつながっているもの．
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>推論規則だけで書いた証明：計算機は要らない</h2>
+  <div class="cols" style="grid-template-columns: 630px 1fr;">
+    <div>
+      <p class="small">「偶数と偶数の和は偶数」の形式証明．$\mathrm{Even}(n)$ は $\exists k,\ n = 2k$ の略記．縦線は「その仮定のもとで」の範囲を表す．</p>
+      <table class="fitch">
+        <tbody>
+        <tr><td class="n">1</td><td class="f"><i></i><span>$m,\ n$ <span class="muted">（任意の自然数）</span></span></td><td class="j">変数を固定（$\forall$ 導入のため）</td></tr>
+        <tr class="hyp"><td class="n">2</td><td class="f"><i></i><i></i><span>$\exists a,\ m = 2a$</span></td><td class="j">仮定（$\to$ 導入のため）</td></tr>
+        <tr class="hyp"><td class="n">3</td><td class="f"><i></i><i></i><i></i><span>$\exists b,\ n = 2b$</span></td><td class="j">仮定（$\to$ 導入のため）</td></tr>
+        <tr class="hyp"><td class="n">4</td><td class="f"><i></i><i></i><i></i><i></i><span>$m = 2a$</span></td><td class="j">2 の $a$ を 1 つとる（$\exists$ 除去のため）</td></tr>
+        <tr class="hyp"><td class="n">5</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$n = 2b$</span></td><td class="j">3 の $b$ を 1 つとる（$\exists$ 除去のため）</td></tr>
+        <tr><td class="n">6</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$m + n = m + n$</span></td><td class="j">$=$ 導入</td></tr>
+        <tr><td class="n">7</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$m + n = 2a + n$</span></td><td class="j">$=$ 除去（4 を 6 に代入）</td></tr>
+        <tr><td class="n">8</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$m + n = 2a + 2b$</span></td><td class="j">$=$ 除去（5 を 7 に代入）</td></tr>
+        <tr><td class="n">9</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$2(a + b) = 2a + 2b$</span></td><td class="j">分配法則（公理）に $\forall$ 除去 ×3</td></tr>
+        <tr><td class="n">10</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$2a + 2b = 2(a + b)$</span></td><td class="j">$=$ 除去（9 の両辺を入れ替える）</td></tr>
+        <tr><td class="n">11</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$m + n = 2(a + b)$</span></td><td class="j">$=$ 除去（10 を 8 に代入）</td></tr>
+        <tr><td class="n">12</td><td class="f"><i></i><i></i><i></i><i></i><i></i><span>$\exists c,\ m + n = 2c$</span></td><td class="j">$\exists$ 導入（$c$ として $a + b$ をとる）</td></tr>
+        <tr><td class="n">13</td><td class="f"><i></i><i></i><i></i><i></i><span>$\exists c,\ m + n = 2c$</span></td><td class="j">$\exists$ 除去（3 と 5–12）</td></tr>
+        <tr><td class="n">14</td><td class="f"><i></i><i></i><i></i><span>$\exists c,\ m + n = 2c$</span></td><td class="j">$\exists$ 除去（2 と 4–13）</td></tr>
+        <tr><td class="n">15</td><td class="f"><i></i><i></i><span>$\mathrm{Even}(n) \to \mathrm{Even}(m + n)$</span></td><td class="j">$\to$ 導入（3–14）</td></tr>
+        <tr><td class="n">16</td><td class="f"><i></i><span>$\mathrm{Even}(m) \to \mathrm{Even}(n) \to \mathrm{Even}(m + n)$</span></td><td class="j">$\to$ 導入（2–15）</td></tr>
+        <tr><td class="n">17</td><td class="f"><span>$\forall m\,\forall n,\ \mathrm{Even}(m) \to \mathrm{Even}(n) \to \mathrm{Even}(m + n)$</span></td><td class="j">$\forall$ 導入 ×2（1–16）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="box info">
+        <h3>ここまで，計算機は登場していない</h3>
+        <ul class="small mb0">
+          <li>形式証明は<strong>紙の上の概念</strong>．Frege『概念記法』（1879），Whitehead–Russell『Principia Mathematica』（1910–13），Gentzen の自然演繹（1934）は，どれも計算機より前</li>
+          <li>検査は「各行が，右に書いた規則の形になっているか」を見るだけ．数学の内容が分からなくてもでき，誰がやっても同じ結果になる</li>
+        </ul>
+      </div>
+      <div class="box warn">
+        <h3>ただし，長い</h3>
+        <ul class="small mb0">
+          <li>1 行の証明が 17 行になった<span class="muted">（しかも，積や和の定義はまだ展開していない）</span></li>
+          <li>『Principia Mathematica』は，$1 + 1 = 2$ に至るまでに数百ページを要した</li>
+        </ul>
+      </div>
+      <div class="box key small">
+        計算機を使う理由は，原理ではなく<strong>量</strong>．
+        長い形式証明を，速く，間違えずに，書いて検査するために使う．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Curry–Howard 対応：自然演繹は，ラムダ計算に対応する</h2>
+  <div class="cols c43">
+    <div>
+      <p class="small">推論規則は，<strong>型付きラムダ計算</strong>（関数型プログラミング言語の核）で項を作る規則と，1 対 1 に対応する<span class="muted">（Curry 1934，Howard 1969）</span>．</p>
+      <table class="full compact" style="font-size: .74em;">
+        <thead><tr><th>論理（自然演繹）</th><th>型付きラムダ計算</th><th>Lean での書き方</th></tr></thead>
+        <tbody>
+          <tr><td>命題 $P$</td><td>型</td><td><code>P : Prop</code></td></tr>
+          <tr><td style="white-space: nowrap;">$P$ の証明（導出図）</td><td>その型の<strong>項</strong>（プログラム）</td><td><code>h : P</code></td></tr>
+          <tr><td>仮定 $\Gamma$</td><td>型の付いた変数</td><td><code>(x : ℕ) (h : P)</code></td></tr>
+          <tr><td>$\to$ 導入 ／ 除去</td><td>関数を作る ／ 適用する</td><td><code>fun h =&gt; t</code> ／ <code>f h</code></td></tr>
+          <tr><td>$\land$ 導入 ／ 除去</td><td>組を作る ／ 成分を取り出す</td><td><code>⟨hP, hQ⟩</code> ／ <code>h.1</code>，<code>h.2</code></td></tr>
+          <tr><td>$\lor$ 導入 ／ 除去</td><td>直和に入れる ／ 場合分け</td><td><code>Or.inl h</code> ／ <code>h.elim f g</code></td></tr>
+          <tr><td>$\forall$ 導入 ／ 除去</td><td>依存関数（$\Pi$ 型）を作る ／ 適用</td><td><code>fun x =&gt; t</code> ／ <code>h a</code></td></tr>
+          <tr><td>$\exists$ 導入 ／ 除去</td><td>依存対（$\Sigma$ 型）を作る ／ 分解</td><td><code>⟨a, h⟩</code> ／ <code>h.elim f</code></td></tr>
+          <tr><td>$\lnot P$，矛盾 $\bot$</td><td>$P \to \bot$．$\bot$ は項のない型</td><td><code>P → False</code></td></tr>
+          <tr class="hl"><td>証明が正しい</td><td>項の型が合う</td><td>型検査が通る</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <p class="small">例：三段論法（$\to$ 除去）は<strong>関数適用</strong>．導出図の各行に，項を書き添えることができる．</p>
+      <div style="font-size: .86em;">
+      $$
+      \dfrac{P \to Q \quad P}{Q}\,(\to E)
+      \ \ \leftrightsquigarrow\ \ 
+      \dfrac{f : P \to Q \quad x : P}{f\,x : Q}
+      $$
+      </div>
+<pre><code class="language-lean">theorem hoge (P Q : Prop)
+    (f : P → Q) (x : P) : Q :=
+  f x</code></pre>
+      <ul class="small">
+        <li><code>f</code> は「$P$ の証明を受け取って $Q$ の証明を返す関数」．<code>x</code> は $P$ の証明．<code>f x</code> は $Q$ の証明</li>
+        <li>読み方：<code>theorem 名前 (仮定) : 結論 := 証明項</code><span class="muted">（第 2 部で説明する）</span></li>
+      </ul>
+      <div class="box key info small">
+        命題 ＝ 型，証明 ＝ 項，<strong>証明の検査 ＝ 型検査</strong>．<br>
+        Lean のような「型による証明」は，この対応の上に作られている．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>命題と証明の関係は，集合と要素の関係</h2>
+  <div class="cols" style="grid-template-columns: 640px 1fr; gap: 24px;">
+    <svg viewBox="0 0 640 480" role="img" aria-label="Prop の中の各命題を集合として描いた図．真の命題は 1 点集合，偽の命題は空集合" style="width: 640px;">
+      <!-- Prop -->
+      <rect x="6" y="6" width="428" height="468" rx="16" fill="#f3f8ff" stroke="#7fa8e6" stroke-width="1.8"/>
+      <text x="24" y="36" font-size="18" font-weight="700" fill="#1f5fbf" class="t-code">Prop</text>
+      <text x="76" y="36" font-size="14.5" fill="#1b1d21" class="t-body">命題の全体（集合の族）</text>
+      <!-- 真 -->
+      <text x="112" y="68" font-size="15" text-anchor="middle" fill="#1b1d21" class="t-code">∃ k, 6 = 2 * k</text>
+      <ellipse cx="112" cy="122" rx="90" ry="44" fill="#fff" stroke="#17803d" stroke-width="2"/>
+      <circle cx="112" cy="114" r="5.5" fill="#17803d"/>
+      <text x="112" y="140" font-size="13.5" text-anchor="middle" fill="#17803d" class="t-code">⟨3, rfl⟩</text>
+      <text x="328" y="68" font-size="15" text-anchor="middle" fill="#1b1d21" class="t-code">2 + 2 = 4</text>
+      <ellipse cx="328" cy="122" rx="90" ry="44" fill="#fff" stroke="#17803d" stroke-width="2"/>
+      <circle cx="328" cy="114" r="5.5" fill="#17803d"/>
+      <text x="328" y="140" font-size="13.5" text-anchor="middle" fill="#17803d" class="t-code">rfl</text>
+      <text x="220" y="188" font-size="13.5" text-anchor="middle" fill="#17803d" font-weight="700" class="t-body">真の命題 ＝ 1 点集合（証明が 1 つある）</text>
+      <!-- 偽 -->
+      <text x="112" y="222" font-size="15" text-anchor="middle" fill="#1b1d21" class="t-code">2 = 3</text>
+      <ellipse cx="112" cy="270" rx="90" ry="38" fill="#fff" stroke="#c62828" stroke-width="2"/>
+      <text x="112" y="278" font-size="22" text-anchor="middle" fill="#c9ced6" class="t-body">∅</text>
+      <text x="328" y="222" font-size="15" text-anchor="middle" fill="#1b1d21" class="t-code">False</text>
+      <ellipse cx="328" cy="270" rx="90" ry="38" fill="#fff" stroke="#c62828" stroke-width="2"/>
+      <text x="328" y="278" font-size="22" text-anchor="middle" fill="#c9ced6" class="t-body">∅</text>
+      <text x="220" y="330" font-size="13.5" text-anchor="middle" fill="#c62828" font-weight="700" class="t-body">偽の命題 ＝ 空集合（証明が存在しない）</text>
+      <!-- 未解決 -->
+      <text x="220" y="362" font-size="15" text-anchor="middle" fill="#1b1d21" class="t-code">RiemannHypothesis</text>
+      <ellipse cx="220" cy="406" rx="150" ry="34" fill="#fff" stroke="#9a6700" stroke-width="2" stroke-dasharray="6 5"/>
+      <text x="220" y="414" font-size="22" text-anchor="middle" fill="#9a6700" font-weight="700" class="t-body">？</text>
+      <text x="220" y="462" font-size="13.5" text-anchor="middle" fill="#9a6700" font-weight="700" class="t-body">未解決の命題：空か 1 点か，まだ分からない</text>
+      <!-- Type -->
+      <rect x="446" y="6" width="188" height="468" rx="16" fill="#fffaf0" stroke="#dcb968" stroke-width="1.8"/>
+      <text x="462" y="36" font-size="18" font-weight="700" fill="#a15c00" class="t-code">Type</text>
+      <text x="514" y="36" font-size="14.5" fill="#1b1d21" class="t-body">データ型の全体</text>
+      <text x="540" y="68" font-size="16" text-anchor="middle" fill="#1b1d21" class="t-code">ℕ</text>
+      <ellipse cx="540" cy="140" rx="80" ry="62" fill="#fff" stroke="#a15c00" stroke-width="2"/>
+      <g fill="#a15c00"><circle cx="500" cy="118" r="4.5"/><circle cx="540" cy="110" r="4.5"/><circle cx="580" cy="120" r="4.5"/><circle cx="514" cy="158" r="4.5"/><circle cx="556" cy="160" r="4.5"/></g>
+      <g font-size="13.5" fill="#1b1d21" class="t-code" text-anchor="middle"><text x="500" y="138">0</text><text x="540" y="130">1</text><text x="580" y="140">2</text><text x="514" y="178">3</text><text x="556" y="180">4</text><text x="590" y="166">…</text></g>
+      <text x="540" y="240" font-size="16" text-anchor="middle" fill="#1b1d21" class="t-code">Bool</text>
+      <ellipse cx="540" cy="296" rx="80" ry="44" fill="#fff" stroke="#a15c00" stroke-width="2"/>
+      <g fill="#a15c00"><circle cx="508" cy="286" r="4.5"/><circle cx="572" cy="286" r="4.5"/></g>
+      <g font-size="13.5" fill="#1b1d21" class="t-code" text-anchor="middle"><text x="508" y="308">true</text><text x="572" y="308">false</text></g>
+      <text x="540" y="380" font-size="13.5" text-anchor="middle" fill="#a15c00" font-weight="700" class="t-body">データ型の要素は</text>
+      <text x="540" y="400" font-size="13.5" text-anchor="middle" fill="#a15c00" font-weight="700" class="t-body">いくつあってもよい</text>
+    </svg>
+    <div>
+      <ul class="small">
+        <li>命題 $P$ を「$P$ の証明全体の集合」とみなす．<code>h : P</code> は $h \in P$ と読める</li>
+        <li>各命題は，<code>Prop</code> という<strong>集合族</strong>の元である：<code>P : Prop</code></li>
+        <li><strong>真の命題は 1 点集合，偽の命題は空集合</strong>に対応する．
+          Lean では，同じ命題の証明はすべて等しいと約束されている（証明無関係性）</li>
+        <li><strong>証明を書く ＝ その集合の要素を 1 つ構成する</strong></li>
+      </ul>
+<pre class="s"><code class="language-lean">-- 同じ命題の 2 つの証明は，つねに等しい
+example (P : Prop) (h₁ h₂ : P) : h₁ = h₂ := rfl</code></pre>
+      <table class="full compact">
+        <thead><tr><th>論理</th><th>集合として読むと</th></tr></thead>
+        <tbody>
+          <tr><td>$P \to Q$</td><td>$P$ から $Q$ への写像の集合</td></tr>
+          <tr><td>$P \land Q$</td><td>直積 $P \times Q$</td></tr>
+          <tr><td>$\forall x,\ P(x)$</td><td>直積族 $\prod_x P(x)$</td></tr>
+        </tbody>
+      </table>
+      <p class="note">空集合からの写像は，行き先が何であってもちょうど 1 つある．これが「偽の仮定からは何でも導ける」にあたる．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>タクティック：証明項を自動で組み立てる仕組み</h2>
+  <div class="cols">
+    <div>
+<pre class="s"><code class="language-lean">def IsEven (n : ℕ) : Prop := ∃ k : ℕ, n = 2 * k
+
+-- 推論規則を 1 つずつ書いた証明項（紙の上の 17 行に対応する）
+theorem add_even (m n : ℕ) (hm : IsEven m) (hn : IsEven n) :
+    IsEven (m + n) :=
+  Exists.elim hm fun a ha =&gt;              -- ∃ 除去
+  Exists.elim hn fun b hb =&gt;              -- ∃ 除去
+  Exists.intro (a + b)                    -- ∃ 導入
+    (Eq.trans (congrArg₂ (· + ·) ha hb)   -- 代入
+      (Nat.mul_add 2 a b).symm)           -- 分配法則
+
+-- 同じ定理を，タクティックで書いた証明
+theorem add_even' (m n : ℕ) (hm : IsEven m) (hn : IsEven n) :
+    IsEven (m + n) := by
+  obtain ⟨a, ha⟩ := hm       -- 「m = 2a と書ける」
+  obtain ⟨b, hb⟩ := hn       -- 「n = 2b と書ける」
+  exact ⟨a + b, by omega⟩    -- 「すると m + n = 2(a + b)」</code></pre>
+      <ul class="small">
+        <li>規則を 1 つずつ書き下すのは，計算機の上でも実用的でない</li>
+        <li><strong>タクティック</strong>：示すべき命題（ゴール）を見て，<strong>証明項を組み立てるプログラム</strong>．<code>by</code> の後に書く</li>
+      </ul>
+    </div>
+    <div>
+      <table class="full compact">
+        <thead><tr><th>タクティック</th><th>埋める行間</th></tr></thead>
+        <tbody>
+          <tr><td><code>intro</code>，<code>apply</code>，<code>exact</code>，<code>obtain</code></td><td>推論規則 1 つ分</td></tr>
+          <tr><td><code>rw</code>，<code>simp</code></td><td>等式による書き換えの列</td></tr>
+          <tr><td><code>ring</code>，<code>omega</code>，<code>linarith</code></td><td>計算（数十〜数万ステップ）</td></tr>
+        </tbody>
+      </table>
+<pre class="s"><code class="language-lean">theorem sq_expand (a b : ℝ) :
+    (a + b) ^ 2 = a ^ 2 + 2 * a * b + b ^ 2 := by
+  ring
+-- ring が組み立てた証明項の大きさ：約 6 万ノード</code></pre>
+<pre class="s"><code class="language-lean">theorem mp_tac (P Q : Prop) (hPQ : P → Q) (hP : P) : Q := by
+  apply hPQ
+  exact hP
+
+#print mp_tac      -- タクティックが作った項を表示する
+-- theorem mp_tac : ∀ (P Q : Prop), (P → Q) → P → Q :=
+-- fun P Q hPQ hP =&gt; hPQ hP</code></pre>
+      <div class="box key info small">
+        検査されるのはタクティックではなく，<strong>出来上がった証明項</strong>．
+        タクティック（や，それを書いた人・AI）が間違っていても，誤った項は型検査で拒否される．
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     2. Lean の仕組み
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">2</div>
+  <h2>Lean の仕組み</h2>
+  <p>定義・定理・証明を書くと，計算機が証明を検査する</p>
+</section>
+
+<section class="slide">
+  <h2>Lean とは</h2>
+  <div class="triad">
+    <div class="card">
+      <div class="hd">定義</div>
+      <div class="sub">プログラムでいう「データ型」</div>
+      <p><code>def</code>, <code>structure</code>, <code>inductive</code>, <code>class</code> で数学的対象を定義する</p>
+    </div>
+    <div class="card">
+      <div class="hd">定理</div>
+      <div class="sub">プログラムでいう「仕様」</div>
+      <p>命題論理・述語論理を使って，主張（仮定と結論）を書く</p>
+    </div>
+    <div class="card">
+      <div class="hd">証明</div>
+      <div class="sub">プログラムでいう「実装」</div>
+      <p>自然演繹，帰納法，背理法などの推論を 1 ステップずつ書く</p>
+    </div>
+  </div>
+  <div class="box info center"><strong>計算機が「実装（証明）が仕様（定理）を満たすこと」を検査する．</strong></div>
+  <div class="cols mt">
+    <ul>
+      <li><strong>Lean 4</strong>：プログラミング言語であり，対話型の定理証明支援系<br>
+        <span class="small muted">L. de Moura らが開発．2023 年から Lean FRO が開発を担う</span></li>
+      <li>論理は<strong>依存型理論</strong><span class="small muted">（型の中に値が現れてよい型理論）</span></li>
+    </ul>
+    <ul>
+      <li><strong>Mathlib</strong>：コミュニティが育てている数学ライブラリ<br>
+        <span class="small muted">代数，解析，測度論，確率論，位相，…</span></li>
+      <li>仲間：Rocq (Coq), Agda ／ Isabelle/HOL ／ Mizar, Metamath</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>例：6 は偶数である</h2>
+  <div class="cols c32">
+    <div>
+<pre class="l"><code class="language-lean">import Mathlib
+
+/-- 定義：自然数 n が偶数であるとは，
+    ある自然数 k が存在して n = 2 * k と書けること． -/
+def IsEven (n : ℕ) : Prop :=
+  ∃ k : ℕ, n = 2 * k
+
+/-- 定理：6 は偶数である． -/
+theorem six_is_even : IsEven 6 := by
+  -- 主張：6 = 2 * 3
+  have six_eq : 6 = 2 * 3 := by decide
+  -- 3 が IsEven 6 の証拠である
+  exact ⟨3, six_eq⟩
+
+/-- 同じ定理．証拠 3 だけ渡して，残りは Lean に任せる． -/
+theorem six_is_even' : IsEven 6 := by
+  use 3</code></pre>
+    </div>
+    <div>
+      <h3 class="rule">読み方</h3>
+      <ul class="small">
+        <li><code>IsEven</code> は，自然数を受け取って<strong>命題</strong>を返す関数（述語）</li>
+        <li><code>def</code> が<strong>定義</strong>，<code>theorem</code> が<strong>定理</strong>，<code>:=</code> の後が<strong>証明</strong><span class="muted">（書き方は次ページ）</span></li>
+        <li><code>by</code> の後は<strong>タクティック</strong>（証明の 1 ステップ）の列</li>
+        <li><code>⟨3, six_eq⟩</code> は「証拠 3」と「3 が条件を満たすことの証明」の組</li>
+        <li><code>decide</code>, <code>use</code> は計算で確かめられることを自動で埋める</li>
+      </ul>
+      <div class="box plain small">
+        ブラウザで試せる：<a href="https://live.lean-lang.org/">live.lean-lang.org</a><br>
+        <span class="muted">左のコードの「コピー」を押して，貼り付けるだけで動く</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>定理の書き方：<code>theorem 名前 仮定 : 結論 := 証明項</code></h2>
+  <div class="anatomy">
+    <div class="seg kw"><code>theorem</code><span>&nbsp;</span></div>
+    <div class="seg nm"><code>add_even</code><span>定理名</span></div>
+    <div class="seg hy"><code>(m n : ℕ) (hm : IsEven m) (hn : IsEven n)</code><span>仮定（変数と，それについての条件）</span></div>
+    <div class="seg op"><code>:</code></div>
+    <div class="seg cc"><code>IsEven (m + n)</code><span>結論</span></div>
+    <div class="seg op"><code>:=</code></div>
+    <div class="seg pf"><code>by …</code><span>証明項</span></div>
+  </div>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>仮定は <code>(名前 : 型)</code> の並び．<code>(m n : ℕ)</code> は変数．<code>(hm : IsEven m)</code> は
+          「$m$ は偶数である」という仮定に，<code>hm</code> という名前を付けたもの</li>
+        <li><code>:</code> の後が<strong>結論</strong>，<code>:=</code> の後が<strong>証明項</strong><span class="muted">（<code>by</code> と書けばタクティックで組み立てる）</span>．
+          証明項の型が結論と一致するかを，Lean が検査する</li>
+        <li><code>def 名前 引数 : 型 := 値</code> と同じ形をしている．<strong>定理とは，「結論」という型をもつ値（証明）の定義</strong></li>
+        <li><code>lemma</code> は <code>theorem</code> と同じ．<code>example</code> は名前を付けない定理</li>
+      </ul>
+      <div class="box key info small">
+        他人の定理を読むときは，<strong><code>:=</code> の前だけ読めば，何が主張されているかが分かる</strong>．
+        <code>:=</code> の後（証明）は Lean が検査する．
+      </div>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">-- 仮定を ∀ と → で書いても，同じ定理
+theorem add_even₂ :
+    ∀ m n : ℕ, IsEven m → IsEven n → IsEven (m + n) :=
+  fun m n hm hn =&gt; add_even m n hm hn
+
+-- 定理は関数．仮定の証明を渡すと，結論の証明が返る
+#check add_even 6 6 six_is_even six_is_even
+-- add_even 6 6 six_is_even six_is_even : IsEven (6 + 6)
+
+example : IsEven 12 := add_even 6 6 six_is_even six_is_even</code></pre>
+      <ul class="small">
+        <li><code>add_even</code> の型は <code>∀ m n, IsEven m → IsEven n → IsEven (m + n)</code>．
+          仮定を括弧で書くのは，その略記にあたる</li>
+        <li>定理を「使う」とは，関数として引数（具体的な値と，仮定の証明）に適用すること</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>定義の書き方：<code>structure</code> と型クラス</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><code>structure</code>：いくつかのデータと，それが満たす条件を束ねる．数学の「〜の組であって，〜を満たすもの」．</p>
+<pre class="s"><code class="language-lean">/-- 定義：調和振動子とは，正の質量 m と
+    正のばね定数 k の組である． -/
+structure Oscillator where
+  m : ℝ
+  k : ℝ
+  m_pos : 0 &lt; m
+  k_pos : 0 &lt; k
+
+/-- 定義：角振動数 ω = √(k/m) -/
+noncomputable def Oscillator.ω (S : Oscillator) : ℝ :=
+  Real.sqrt (S.k / S.m)
+
+/-- 定理：角振動数は正である． -/
+theorem Oscillator.ω_pos (S : Oscillator) : 0 &lt; S.ω :=
+  Real.sqrt_pos.mpr (div_pos S.k_pos S.m_pos)</code></pre>
+      <ul class="small">
+        <li>条件（<code>m_pos</code>，<code>k_pos</code>）も成分．<code>S.k_pos</code> と書いて証明の中で使える</li>
+        <li><code>noncomputable</code> は「実行できるプログラムにはならない」という印<span class="muted">（実数の平方根）</span>．証明には影響しない</li>
+      </ul>
+    </div>
+    <div>
+      <p class="small"><strong>型クラス</strong>（<code>class</code>）：型に付随する構造．<code>[MyMonoid M]</code> は「$M$ をモノイドとする」．</p>
+<pre class="xs"><code class="language-lean">/-- 定義：モノイド（結合的な積と単位元をもつ） -/
+class MyMonoid (M : Type) where
+  mul : M → M → M
+  one : M
+  mul_assoc : ∀ a b c : M, mul (mul a b) c = mul a (mul b c)
+  one_mul : ∀ a : M, mul one a = a
+  mul_one : ∀ a : M, mul a one = a
+
+/-- 例：自然数は，加法と 0 についてモノイドである． -/
+instance : MyMonoid ℕ where
+  mul := (· + ·)
+  one := 0
+  mul_assoc := Nat.add_assoc
+  one_mul := Nat.zero_add
+  mul_one := Nat.add_zero
+
+open MyMonoid in
+/-- 定理：単位元は一意である． -/
+theorem MyMonoid.one_unique {M : Type} [MyMonoid M] (e : M)
+    (he : ∀ a : M, mul e a = a) : e = one := by
+  rw [← mul_one e, he]</code></pre>
+      <ul class="small">
+        <li><code>instance</code> で具体例を登録すると，Lean が必要なときに自動で探す</li>
+        <li>Mathlib の「群 $G$」は <code>(G : Type) [Group G]</code>．群の公理も定理も，これだけで使える</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>対話的に証明する</h2>
+  <div class="stepper" data-start="0">
+<pre class="l"><code class="language-lean">def IsEven (n : ℕ) : Prop :=
+  ∃ k : ℕ, n = 2 * k
+
+theorem six_is_even : IsEven 6 := by
+  have six_eq : 6 = 2 * 3 := by decide
+  exact ⟨3, six_eq⟩</code></pre>
+    <div class="infoview">
+      <div class="state" data-line="4" data-cap="by の直後：示すべきこと（ゴール）が 1 つある">
+<pre><code class="language-goal">⊢ IsEven 6</code></pre>
+        <p>まだ仮定はない．</p>
+      </div>
+      <div class="state" data-line="5" data-cap="have … の後：仮定が 1 つ増えた">
+<pre><code class="language-goal">six_eq : 6 = 2 * 3
+⊢ IsEven 6</code></pre>
+        <p>補題 <code>six_eq</code> が使えるようになった．ゴールは同じ．</p>
+      </div>
+      <div class="state" data-line="6" data-cap="exact … の後：証明終わり">
+<pre><code class="language-goal">No goals</code></pre>
+        <p>ゴールがすべて閉じた．</p>
+      </div>
+    </div>
+  </div>
+  <div class="cols c32 mt2">
+    <div>
+      <ul>
+        <li>エディタ（VS Code）の右側 <strong>Infoview</strong> に，カーソル位置での<strong>ゴール</strong>が表示される</li>
+        <li><code>⊢</code> の上：いま使える変数と仮定（<strong>ローカルコンテキスト</strong> $\Gamma$）<br>
+            <code>⊢</code> の下：これから示すこと</li>
+        <li>タクティックを 1 行書くたびに，ゴールが書き換わる</li>
+      </ul>
+      <p class="note">上の図は Infoview の表示を再現したもの．コードの行をクリックするか，◀ ▶（キーボードでは <code>[</code> <code>]</code>）で進められる．</p>
+    </div>
+    <figure>
+      <img src="../assets/lean4web.png" alt="lean4web の画面" style="width: 100%;">
+      <figcaption>ブラウザ環境 lean4web での実行例（右が Infoview）</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>自然演繹の推論規則と，証明ステップの対応</h2>
+  <div class="cols">
+    <div>
+      <p>証明図：横線の上が前提，下が結論．$\Gamma$ はいま使える仮定の集まり．</p>
+      $$
+      \frac{\Gamma \vdash P(3)}{\Gamma \vdash \exists k,\ P(k)}\ (\exists I)
+      \qquad
+      \frac{\Gamma \vdash P \to Q \quad \Gamma \vdash P}{\Gamma \vdash Q}\ (\to E)
+      $$
+<pre class="s"><code class="language-lean">example (P : ℕ → Prop) (h : P 3) : ∃ k, P k := by
+  exact ⟨3, h⟩          -- ∃ 導入
+
+example (P Q : Prop) (hPQ : P → Q) (hP : P) : Q := by
+  exact hPQ hP          -- → 除去（modus ponens）</code></pre>
+      <ul class="small">
+        <li>推論規則 1 つが，タクティック 1 つ（＝項の構成 1 つ）に対応する</li>
+        <li><strong>導入規則</strong>はその型の項の「作り方」，<strong>除去規則</strong>は「使い方」</li>
+        <li>$\Gamma$ は Infoview の <code>⊢</code> の上に並ぶもの</li>
+      </ul>
+    </div>
+    <div>
+      <table class="full compact">
+        <thead><tr><th>規則</th><th>タクティック</th><th>項</th></tr></thead>
+        <tbody>
+          <tr><td>$\to I$</td><td><code>intro h</code></td><td><code>fun h =&gt; …</code></td></tr>
+          <tr><td>$\to E$</td><td><code>apply hPQ</code>，<code>exact hPQ hP</code></td><td><code>hPQ hP</code></td></tr>
+          <tr><td>$\land I$</td><td><code>constructor</code></td><td><code>⟨hP, hQ⟩</code></td></tr>
+          <tr><td>$\land E$</td><td><code>obtain ⟨h₁, h₂⟩ := h</code></td><td><code>h.1</code>，<code>h.2</code></td></tr>
+          <tr><td>$\lor I$</td><td><code>left</code>，<code>right</code></td><td><code>Or.inl h</code>，<code>Or.inr h</code></td></tr>
+          <tr><td>$\lor E$</td><td><code>rcases h with h₁ | h₂</code></td><td><code>h.elim f g</code></td></tr>
+          <tr><td>$\forall I$</td><td><code>intro x</code></td><td><code>fun x =&gt; …</code></td></tr>
+          <tr><td>$\forall E$</td><td><code>specialize h x</code></td><td><code>h x</code></td></tr>
+          <tr><td>$\exists I$</td><td><code>use 3</code></td><td><code>⟨3, h⟩</code></td></tr>
+          <tr><td>$\exists E$</td><td><code>obtain ⟨x, hx⟩ := h</code></td><td><code>h.elim f</code></td></tr>
+          <tr><td>$\lnot$，背理法</td><td><code>by_contra h</code>，<code>exfalso</code></td><td><code>Classical.byContradiction</code></td></tr>
+          <tr><td>$=$</td><td><code>rfl</code>，<code>rw [h]</code></td><td><code>Eq.refl a</code>，<code>h ▸ t</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>証明図は上から下へ，タクティックは下から上へ</h2>
+  <p>例：$\Gamma = \{\,P \to Q,\ Q \to R\,\}$ のもとで $P \to R$ を示す．</p>
+  <div class="cols c32">
+    <div>
+      <h3 class="rule">自然演繹（前向き：仮定から結論へ）</h3>
+      <div style="font-size: .84em; margin: 14px 0 16px 0;">
+      $$
+      \dfrac{
+        \dfrac{
+          \Gamma, P \vdash Q \to R
+          \quad
+          \dfrac{\Gamma, P \vdash P \to Q \quad \textcolor{#8431c4}{\Gamma, P \vdash P}}
+                {\Gamma, P \vdash Q}\ \textcolor{#17803d}{(\to E)}
+        }{\Gamma, P \vdash R}\ \textcolor{#0b6bcb}{(\to E)}
+      }{\Gamma \vdash P \to R}\ \textcolor{#b3261e}{(\to I)}
+      $$
+      </div>
+<pre class="s"><code class="language-lean">example (P Q R : Prop) (hPQ : P → Q) (hQR : Q → R) : P → R := by
+  intro hP        -- → 導入
+  apply hQR       -- → 除去：R を示すには Q を示せばよい
+  apply hPQ       -- → 除去：Q を示すには P を示せばよい
+  exact hP        -- 仮定そのもの</code></pre>
+    </div>
+    <div>
+      <h3 class="rule">Lean（後ろ向き：ゴールから仮定へ）</h3>
+      <div class="steps">
+        <span class="tac muted">（開始）</span><span class="goal">hPQ, hQR <span class="tk-goal">⊢</span> P → R</span>
+        <span class="tac rb1 r1">intro hP</span><span class="goal">hPQ, hQR, hP : P <span class="tk-goal">⊢</span> R</span>
+        <span class="tac rb2 r2">apply hQR</span><span class="goal">hPQ, hQR, hP : P <span class="tk-goal">⊢</span> Q</span>
+        <span class="tac rb3 r3">apply hPQ</span><span class="goal">hPQ, hQR, hP : P <span class="tk-goal">⊢</span> P</span>
+        <span class="tac rb4 r4">exact hP</span><span class="goal muted">No goals</span>
+      </div>
+      <ul class="small mt2">
+        <li>色は，左の証明図の規則と対応している</li>
+        <li>タクティックは，証明図を<strong>結論の側から</strong>組み立てる操作</li>
+        <li>状態＝ゴール，行動＝タクティック，と見れば，定理証明は<strong>探索問題</strong>になる<span class="muted">（AI による証明もこの見方に基づく）</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>型と項：すべての式は型をもつ</h2>
+  <div class="cols c43">
+    <div>
+      <p>Lean では <code>a : A</code> と書いて「項 <code>a</code> の型は <code>A</code> である」と読む．</p>
+      <table class="full compact">
+        <thead><tr><th>項</th><th>型</th><th>読み方</th></tr></thead>
+        <tbody>
+          <tr><td><code>3</code></td><td><code>ℕ</code></td><td>3 は自然数</td></tr>
+          <tr><td><code>true</code></td><td><code>Bool</code></td><td>真偽値（計算で得られるデータ）</td></tr>
+          <tr><td><code>Real.pi</code></td><td><code>ℝ</code></td><td>$\pi$ は実数</td></tr>
+          <tr><td><code>fun x =&gt; x + 1</code></td><td><code>ℕ → ℕ</code></td><td>自然数から自然数への関数</td></tr>
+          <tr><td><code>ℕ</code>，<code>ℝ → ℝ</code></td><td><code>Type</code></td><td>型そのものも項であり，型をもつ</td></tr>
+          <tr><td><code>Matrix (Fin 2) (Fin 3) ℝ</code></td><td><code>Type</code></td><td>2×3 実行列の型</td></tr>
+          <tr class="hl"><td><code>2 = 3</code></td><td><code>Prop</code></td><td>命題．<strong>偽でも，型としては正しい</strong></td></tr>
+          <tr class="hl"><td><code>IsEven 6</code></td><td><code>Prop</code></td><td>命題「6 は偶数」</td></tr>
+          <tr class="hl"><td><code>six_is_even</code></td><td><code>IsEven 6</code></td><td>命題 <code>IsEven 6</code> の<strong>証明</strong></td></tr>
+        </tbody>
+      </table>
+<pre class="s"><code class="language-lean">#check 3                     -- 3 : ℕ
+#check fun x : ℕ =&gt; x + 1    -- fun x =&gt; x + 1 : ℕ → ℕ
+#check 2 = 3                 -- 2 = 3 : Prop
+#check six_is_even           -- six_is_even : IsEven 6
+#check IsEven                -- IsEven (n : ℕ) : Prop
+#check Prop                  -- Prop : Type</code></pre>
+      <p class="note"><code>#check 式</code> と書くと，Lean がその式の型を答える（<code>--</code> の右が Lean の答え）．</p>
+    </div>
+    <div>
+      <div class="tower">
+        <div class="hd"></div><div class="hd">データの世界</div><div class="hd">命題の世界</div>
+        <div class="lv">型の型</div><div class="data"><code>Type</code></div><div class="prop"><code>Prop</code></div>
+        <div class="lv">型</div>
+        <div class="data"><code>ℕ</code>，<code>ℝ → ℝ</code>，<br><code>List ℕ</code></div>
+        <div class="prop"><code>IsEven 6</code>，<code>2 = 3</code>，<br><code>∀ n, n + 0 = n</code></div>
+        <div class="lv">項</div>
+        <div class="data"><code>3</code>，<code>fun x =&gt; x + 1</code>，<br><code>[1, 2, 3]</code></div>
+        <div class="prop"><code>six_is_even</code><br><span class="muted"><code>2 = 3</code> の項は存在しない</span></div>
+      </div>
+      <ul class="small">
+        <li>命題は<strong>型</strong>．その命題の証明は，その型の<strong>項</strong></li>
+        <li>命題が「真」＝その型の項が作れる</li>
+        <li><code>Bool</code> と <code>Prop</code> は別物：<code>true : Bool</code> は計算する値，<code>True : Prop</code> は証明する命題</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>$\forall$ と $\exists$ は依存型<small>$\Pi$ 型と $\Sigma$ 型</small></h2>
+  <div class="cols c43">
+    <div>
+      <table class="full compact">
+        <thead><tr><th></th><th>値に依存しない</th><th>値に依存する（依存型）</th><th>命題として読むと</th></tr></thead>
+        <tbody>
+          <tr><td><strong>関数</strong></td><td><code>α → β</code></td><td><code>(x : α) → β x</code>　$\Pi$ 型</td><td><code>∀ x : α, P x</code></td></tr>
+          <tr><td><strong>組</strong></td><td><code>α × β</code></td><td><code>(x : α) × β x</code>　$\Sigma$ 型</td><td><code>∃ x : α, P x</code></td></tr>
+        </tbody>
+      </table>
+<pre class="s"><code class="language-lean">-- Π 型：返り値の「型」が，引数の「値」に依存する
+example : (n : ℕ) → Fin (n + 1) := fun n =&gt; ⟨0, Nat.succ_pos n⟩
+example : ∀ n : ℕ, IsEven (2 * n) := fun n =&gt; ⟨n, rfl⟩
+
+-- Σ 型：第 2 成分の「型」が，第 1 成分の「値」に依存する
+example : (n : ℕ) × Fin (n + 1) := ⟨5, 3⟩
+example : ∃ n : ℕ, IsEven n := ⟨6, six_is_even⟩
+example : { n : ℕ // IsEven n } := ⟨6, six_is_even⟩   -- 部分型「偶数全体」</code></pre>
+      <p class="note"><code>∀ n, IsEven (2 * n)</code> の証明は「各 <code>n</code> に対して <code>IsEven (2 * n)</code> の証明を返す関数」．だから全称命題の証明は，関数のように引数に適用して使える．</p>
+    </div>
+    <div>
+      <h3 class="rule">工学的な御利益：次元は型の一部</h3>
+<pre class="s"><code class="language-lean">example (A : Matrix (Fin 2) (Fin 3) ℝ)
+        (B : Matrix (Fin 3) (Fin 4) ℝ) :
+    Matrix (Fin 2) (Fin 4) ℝ :=
+  A * B          -- 2×3 と 3×4 の積は 2×4</code></pre>
+<pre class="s"><code class="language-lean">example (A B : Matrix (Fin 2) (Fin 3) ℝ) :
+    Matrix (Fin 2) (Fin 3) ℝ :=
+  A * B
+-- error: failed to synthesize instance of type class
+--   HMul (Matrix (Fin 2) (Fin 3) ℝ)
+--        (Matrix (Fin 2) (Fin 3) ℝ) ?m</code></pre>
+      <ul class="small">
+        <li><code>Matrix (Fin m) (Fin n) ℝ</code> は値 <code>m</code>, <code>n</code> に依存する型</li>
+        <li>次元の合わない積は，証明以前に<strong>型エラー</strong>で弾かれる</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean の中で起きていること</h2>
+  <div class="flow" style="margin-bottom: 8px;">
+    <div class="node">ソース<br><b>.lean</b><br><span class="tiny muted">ただの文字列</span></div>
+    <div class="arrow"><small>構文解析<br>parse</small>→</div>
+    <div class="node">構文木<br><b>Syntax</b><br><span class="tiny muted">まだ意味はない</span></div>
+    <div class="arrow"><small>精密化<br>elaboration</small>→</div>
+    <div class="node trust">核言語の項<br><b>Expr</b><br><span class="tiny muted">すべてが明示された項</span></div>
+    <div class="arrow"><small>型検査<br>kernel</small>→</div>
+    <div class="node ok">環境に登録<br><b>.olean</b><br><span class="tiny muted">他のファイルから import できる</span></div>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="box untrust small">
+        <h3>精密化（エラボレータ）<span class="tag untrust">大きい・拡張できる・信頼しない</span></h3>
+        人間が省略したものをすべて補って，核言語の項を作る：<br>
+        マクロ展開，<strong>型推論</strong>，<strong>単一化</strong>，型クラスの解決，暗黙の引数，型強制，<strong>タクティックの実行</strong>
+      </div>
+      <div class="box trust small">
+        <h3>カーネル<span class="tag trust">小さい・信頼する</span></h3>
+        核言語の項だけを見て<strong>型検査</strong>する．必要に応じて<strong>正規化</strong>して，2 つの項が等しいかを判定する．
+        タクティックにバグがあって誤った項ができても，ここで拒否される．
+      </div>
+    </div>
+    <div>
+      <p class="small">例：<code>1 + 1 = 2</code> と書くと，精密化の後は次の項になる<span class="muted">（<code>pp.explicit</code> の出力．一部を <code>_</code> で省略）</span></p>
+<pre class="xs"><code class="language-lean">@Eq ℕ
+  (@HAdd.hAdd ℕ ℕ ℕ (@instHAdd ℕ instAddNat)
+    (@OfNat.ofNat ℕ 1 _) (@OfNat.ofNat ℕ 1 _))
+  (@OfNat.ofNat ℕ 2 _)</code></pre>
+      <ul class="small">
+        <li><code>+</code> はどの型の加法か，<code>1</code> はどの型の 1 か，を型推論と型クラス解決が決める</li>
+        <li>同じ <code>1 + 1 = 2</code> でも，<code>ℝ</code> の上なら別の項（<code>Real.instAdd</code> など）になる</li>
+        <li>人間が読むのは左端，カーネルが検査するのは右から 2 番目</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>用語の整理：項 <code>a</code> と型 <code>A</code> をめぐる問題</h2>
+  <div class="sig g4">
+    <div class="card easy">
+      <div class="hd"><span class="name">型検査</span><span class="en">type checking</span></div>
+      <div class="io">(a, A) ↦ <span class="q">a : A ?</span></div>
+      <p>項と型が与えられて，合っているかを判定する．</p>
+<pre><code class="language-lean">example : IsEven 6 := ⟨3, rfl⟩
+-- エラーが出なければ合っている</code></pre>
+      <div class="who"><strong>カーネル</strong>．決定可能で，機械的に終わる</div>
+    </div>
+    <div class="card easy">
+      <div class="hd"><span class="name">正規化</span><span class="en">normalization</span></div>
+      <div class="io">a ↦ <span class="q">a′</span></div>
+      <p>定義を展開して計算し，それ以上進まない形にする．</p>
+<pre><code class="language-lean">#reduce 1 + 1                -- 2
+#reduce (fun x =&gt; x + 1) 2   -- 3</code></pre>
+      <div class="who"><strong>カーネル</strong>．等価性判定の中で使う</div>
+    </div>
+    <div class="card easy">
+      <div class="hd"><span class="name">等価性判定</span><span class="en">conversion</span></div>
+      <div class="io">(a, b) ↦ <span class="q">a ≡ b ?</span></div>
+      <p>2 つの項が，計算すれば同じになるか（定義的等価か）を判定する．</p>
+<pre><code class="language-lean">example : 1 + 1 = 2 := rfl
+-- 1 + 1 を計算すると 2 になるから</code></pre>
+      <div class="who"><strong>カーネル</strong>．型検査の中で使う</div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="name">型推論</span><span class="en">type inference</span></div>
+      <div class="io">a ↦ <span class="q">A</span></div>
+      <p>項から，その型を求める．</p>
+<pre><code class="language-lean">#check fun x : ℕ =&gt; x + 1
+-- fun x =&gt; x + 1 : ℕ → ℕ</code></pre>
+      <div class="who">エラボレータ（とカーネル）</div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="name">単一化</span><span class="en">unification</span></div>
+      <div class="io">(s, t) ↦ <span class="q">σ</span> <span class="g">: sσ ≡ tσ</span></div>
+      <p>穴 <code>?a</code> を含む 2 つの式を一致させる代入 σ を求める．</p>
+<pre data-nocopy><code class="language-lean">-- ?n + ?m = ?m + ?n  と
+--  x +  y =  y +  x  を一致させる
+-- ↦  ?n := x,  ?m := y</code></pre>
+      <div class="who">エラボレータ（次ページ）</div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="name">型クラス解決</span><span class="en">instance synthesis</span></div>
+      <div class="io">C α ↦ <span class="q">inst</span></div>
+      <p>「ℝ の加法」「この型の群構造」など，登録済みの構造を探す．</p>
+<pre><code class="language-lean">#synth Add ℝ
+-- Real.instAdd</code></pre>
+      <div class="who">エラボレータ．登録された <code>instance</code> を探索</div>
+    </div>
+    <div class="card">
+      <div class="hd"><span class="name">精密化</span><span class="en">elaboration</span></div>
+      <div class="io">表層の式 ↦ <span class="q">完全な項</span></div>
+      <p>省略された引数・型・構造を，すべて補う．</p>
+<pre data-nocopy><code class="language-lean">-- 1 + 1 = 2  ↦  @Eq ℕ
+--   (@HAdd.hAdd ℕ ℕ ℕ _ 1 1) 2</code></pre>
+      <div class="who">エラボレータ．左の 3 つを組み合わせる</div>
+    </div>
+    <div class="card hard">
+      <div class="hd"><span class="name">証明探索</span><span class="en">proof search</span></div>
+      <div class="io">A ↦ <span class="q">a</span></div>
+      <p>型（命題）から，その項（証明）を見つける．</p>
+<pre><code class="language-lean">example (a b : ℕ) :
+    a + b = b + a := by exact?
+-- Try this: exact Nat.add_comm a b</code></pre>
+      <div class="who"><strong>人間，タクティック，AI</strong>．一般には決定不能</div>
+    </div>
+  </div>
+  <div class="cols mt">
+    <div class="box key info small">
+      <strong>探索は難しいが，検査は易しい．</strong>
+      証明を誰が（人でも AI でも）どうやって見つけたかは問わず，<strong>緑の枠の 3 つ（カーネルの仕事）だけを信頼すればよい</strong>．
+    </div>
+    <div class="box warn small">
+      <strong>機械的に検査できない問題</strong>：Lean の主張 <code>A</code> が，意図した数学の主張と同じか<span class="muted">（形式化，自動形式化）</span>．
+      これは人間が読むしかない（→ 第 3 部）．
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>単一化：穴 <code>?a</code> に何を入れれば，2 つの式が一致するか</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><code>?a</code> は<strong>メタ変数</strong>：「まだ決まっていない項」を表す穴で，Lean が後から埋める．
+        ふつうの変数 <code>x</code> は「任意に与えられた値」，<code>?a</code> は「これから Lean が決める値」．</p>
+      <p class="small">例：定理 <code>Nat.add_comm : ∀ n m, n + m = m + n</code> を，ゴール <code>x + y = y + x</code> に使う．</p>
+      <div class="unify">
+        <span class="lab">定理の結論<br>（∀ を穴に置き換える）</span>
+        <span><span class="mv a1">?n</span> + <span class="mv a2">?m</span> = <span class="mv a2">?m</span> + <span class="mv a1">?n</span></span>
+        <span class="lab">ゴール</span>
+        <span><span class="a1">&nbsp;x</span> + <span class="a2">&nbsp;y</span> = <span class="a2">&nbsp;y</span> + <span class="a1">&nbsp;x</span></span>
+        <span class="sol"><span class="lab">単一化の解</span><span><span class="mv">?n</span> := x，　<span class="mv">?m</span> := y</span></span>
+      </div>
+<pre class="s"><code class="language-lean">-- 形が合わない例：積の可換性に，和の可換性は使えない
+example (x y : ℕ) : x * y = y * x := by
+  apply Nat.add_comm
+-- error: Tactic `apply` failed: could not unify
+-- the conclusion of `Nat.add_comm`
+--   ?n + ?m = ?m + ?n
+-- with the goal
+--   x * y = y * x</code></pre>
+      <p class="note">働く場所：<code>apply</code>，<code>exact</code>，<code>rw</code>，<code>simp</code>（定理をゴールに合わせる），暗黙の引数の決定（<code>id 3</code> は <code>@id ?α 3</code> と読まれ，<code>?α := ℕ</code> と決まる）．</p>
+    </div>
+    <div>
+      <div class="box plain small">
+        <h3>Q. 「$x + 1 = y$ と $x = 1$ から $y = 2$ を導く」のは単一化か</h3>
+        <p><strong>A. いいえ．これは推論（書き換えと計算）である．</strong></p>
+        <ul class="mb0">
+          <li>単一化が決めるのは，穴 <code>?a</code> の中身だけ．<code>x</code> や <code>y</code> はふつうの変数で，値は入らない</li>
+          <li>単一化は仮定（<code>x = 1</code>）を使わない．使うのは，式の形の照合と，定義の展開（計算）だけ</li>
+          <li>この推論は，仮定による書き換え（$=$ 除去）で行う</li>
+        </ul>
+      </div>
+<pre class="s"><code class="language-lean">-- y を x + 1 に，x を 1 に書き換える．残る 1 + 1 = 2 は計算
+example (x y : ℕ) (h₁ : x + 1 = y) (h₂ : x = 1) : y = 2 := by
+  rw [← h₁, h₂]</code></pre>
+<pre class="s"><code class="language-lean">-- 単一化が「未知のもの」を決める例．`_` は穴で，
+-- rfl : ?a = ?a との照合から ?y := 1 + 1 と決まる
+example : ∃ y : ℕ, 1 + 1 = y := ⟨_, rfl⟩</code></pre>
+      <div class="box key info small">
+        単一化は「式の形を合わせる」だけの仕組みで，新しい事実は導かない．
+        しかも結果はカーネルが検査するので，<strong>単一化を信頼する必要はない</strong>．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>正規化と，2 種類の「等しい」<small>definitionally equal と外延性</small></h2>
+  <div class="cols">
+    <div>
+      <p class="small">自然数の加法は，<strong>第 2 引数</strong>についての再帰で定義されている（概略）：</p>
+<pre class="s" data-nocopy><code class="language-lean">def Nat.add : ℕ → ℕ → ℕ
+  | n, .zero   =&gt; n
+  | n, .succ m =&gt; .succ (Nat.add n m)</code></pre>
+      <div class="reduce">
+        1 + 1 <span class="st">⇝</span> Nat.add 1 (succ 0) <span class="st">⇝</span> succ (Nat.add 1 0) <span class="st">⇝</span> succ 1 <span class="res">＝ 2　✓</span><br>
+        n + 0 <span class="st">⇝</span> Nat.add n zero <span class="st">⇝</span> n <span class="res">　✓</span><br>
+        0 + n <span class="st">⇝</span> Nat.add 0 n <span class="stuck">　…n が変数のままでは進まない</span>
+      </div>
+      <table class="full compact">
+        <tbody>
+          <tr><td style="white-space: nowrap;"><strong>定義的に等しい</strong><br><span class="muted">definitionally equal</span></td>
+            <td>定義を展開して計算（正規化）すると，同じ項になる．<code>rfl</code> だけで示せ，カーネルが自動で判定する</td></tr>
+          <tr><td style="white-space: nowrap;"><strong>命題として等しい</strong><br><span class="muted">propositionally equal</span></td>
+            <td><code>a = b</code> の証明がある．帰納法や補題を使って証明する</td></tr>
+          <tr><td style="white-space: nowrap;"><strong>外延性</strong><br><span class="muted">extensionality</span></td>
+            <td>「中身がすべて同じなら等しい」という原理．<code>funext</code>（関数：すべての入力で値が等しい），<code>propext</code>（命題：同値），<code>Set.ext</code>（集合：同じ要素をもつ）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">example : 1 + 1 = 2 := rfl               -- OK：計算すれば同じ
+example (n : ℕ) : n + 0 = n := rfl       -- OK
+example (n : ℕ) : 0 + n = n := rfl       -- エラー：計算が進まない
+example (n : ℕ) : 0 + n = n := by simp   -- 命題としては等しい
+
+-- fun n =&gt; 0 + n と fun n =&gt; n は，すべての n で値が等しい
+-- （外延的に等しい）が，定義的には等しくない
+example : (fun n : ℕ =&gt; 0 + n) = (fun n =&gt; n) := rfl   -- エラー
+example : (fun n : ℕ =&gt; 0 + n) = (fun n =&gt; n) := by
+  funext n     -- 外延性：各 n で値が等しいことを示せばよい
+  simp</code></pre>
+      <ul class="small">
+        <li>定義的等価は<strong>定義の書き方に依存する</strong>（内包的）．<code>n + 0</code> と <code>0 + n</code> は値としては同じだが，計算の進み方が違う</li>
+        <li>外延性は，Lean では定理か公理：<code>funext</code> は公理 <code>Quot.sound</code> から証明され，<code>propext</code> は公理そのもの</li>
+        <li>カーネルが黙って認めるのは定義的等価だけ．それ以外の等式には<strong>証明項</strong>が要る</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>形式化できると何が嬉しいか</h2>
+  <div class="cols c32">
+    <div>
+      <ul>
+        <li>定理の<strong>主張</strong>（仮定と結論）が曖昧さなく定まる</li>
+        <li>証明の正しさを<strong>機械的に検証</strong>できる</li>
+        <li>知識を<strong>再利用できる形</strong>で蓄積できる<span class="small muted">　例：Mathlib</span></li>
+        <li>証明の構造が見える<span class="small muted">　例：blueprint（LaTeX と Lean を並べた文書）</span></li>
+        <li>証明を整理する過程で，<strong>隠れた仮定</strong>や<strong>より強い主張</strong>が見つかる</li>
+        <li><strong>AI の検証器</strong>になる：AI が 1 人で試行錯誤でき，誤った証明は決して通らない</li>
+      </ul>
+      <div class="box plain small">
+        物理・工学の文脈では：「この式変形はどの仮定の下で正しいのか」
+        「この近似はどこで入ったのか」を，計算機が追跡してくれる．
+      </div>
+    </div>
+    <figure>
+      <img src="../assets/ridgelet-blueprint.png" alt="Lean Ridgelet の blueprint" style="max-height: 470px;">
+      <figcaption>Lean Ridgelet Blueprint：定義の LaTeX 表記と Lean コードが並ぶ</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>依存関係の可視化</h2>
+  <figure class="grow">
+    <img src="../assets/dependency-graph-sec03.png" alt="blueprint の依存グラフ" style="max-height: 540px;">
+    <figcaption>blueprint の依存グラフ：定義と定理がノード，「どれを使って示したか」が辺．色は証明の進み具合を表す</figcaption>
+  </figure>
+</section>
+
+<section class="slide">
+  <h2>どこまで形式化できるか</h2>
+  <div class="cols c21">
+    <div>
+      <ul>
+        <li>現代の（典型的な）数学は記述できる
+          <ul class="small">
+            <li>依存型理論：<strong>Lean</strong>，Rocq (Coq)，Agda</li>
+            <li>高階論理：Isabelle/HOL，HOL Light</li>
+            <li>集合論：Mizar，Metamath</li>
+          </ul>
+        </li>
+        <li>数学ライブラリ
+          <ul class="small">
+            <li><strong>Mathlib</strong> (Lean)：代数，位相，解析，確率，幾何，組合せ論，論理，…</li>
+            <li>MathComp (Rocq)，AFP (Isabelle)，MML (Mizar)</li>
+          </ul>
+        </li>
+        <li>Mathlib の外（Lean）
+          <ul class="small">
+            <li><strong>Reservoir</strong>：Lean パッケージの索引</li>
+            <li>CSLib（計算機科学），<strong>Physlib</strong>（物理学），StatMLlib（統計・機械学習）</li>
+            <li>Formal Conjectures（Google DeepMind）：未解決問題を Lean の主張として集めたもの</li>
+          </ul>
+        </li>
+        <li>国内の事例：Lean Rademacher（統計的学習理論），Lean Quantum（量子情報），Lean Ridgelet（関数解析），Leray–Hopf 対訳ノート（微分方程式），測度論と積分，東大数学 2026</li>
+      </ul>
+    </div>
+    <figure>
+      <img src="../assets/mathlib-overview.png" alt="Mathlib overview" style="max-height: 530px;">
+      <figcaption>Mathlib overview</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ======================================================================
+     3. なぜ・いつ信頼できるか
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">3</div>
+  <h2>なぜ・いつ信頼できるか</h2>
+  <p>信頼するのは，小さなカーネルと公理と主張だけ．主張は人間が読む</p>
+</section>
+
+<section class="slide">
+  <h2>なぜ信頼できるか：小さなカーネルが証明項を検査する</h2>
+  <div class="cols">
+    <div>
+      <div class="box trust">
+        <h3>信頼するもの <span class="tag trust">小さい</span></h3>
+        <ul class="small mb0">
+          <li><strong>カーネル</strong>：核言語の型検査器．小さく，独立した実装が複数ある</li>
+          <li><strong>公理</strong>：Mathlib の証明が使うのは通常，右の 3 つだけ</li>
+          <li><strong>定理の主張</strong>と，そこに現れる定義<span class="muted">（人間が読む）</span></li>
+        </ul>
+      </div>
+      <div class="box untrust">
+        <h3>信頼しなくてよいもの <span class="tag untrust">大きい</span></h3>
+        <ul class="small mb0">
+          <li>タクティック，エラボレータ，自動証明器<span class="muted">（誤った項はカーネルが拒否する）</span></li>
+          <li>証明の中身<span class="muted">（何万行あっても読まなくてよい）</span></li>
+          <li>証明を書いた人，書いた AI</li>
+        </ul>
+      </div>
+      <p class="note">独立した実装のカーネル：nanoda（Rust），Lean4Lean（Lean），con-leche，con-ron など．</p>
+    </div>
+    <div>
+<pre><code class="language-lean">-- #print axioms：証明が最終的に依存する公理をすべて表示する
+#print axioms six_is_even
+-- 'six_is_even' does not depend on any axioms
+
+#print axioms no_finite_dim_ccr     -- 後で出てくる定理
+-- 'no_finite_dim_ccr' depends on axioms:
+--   [propext, Classical.choice, Quot.sound]</code></pre>
+      <table class="full compact">
+        <thead><tr><th>公理</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td><code>propext</code></td><td>命題外延性：<code>(P ↔ Q) → P = Q</code></td></tr>
+          <tr><td><code>Quot.sound</code></td><td>商型の健全性：同値なものは商で等しい</td></tr>
+          <tr><td><code>Classical.choice</code></td><td>選択公理：<code>Nonempty α → α</code><span class="muted">（排中律もここから出る）</span></td></tr>
+        </tbody>
+      </table>
+      <div class="box warn small">
+        <h3>カーネルにバグはないのか</h3>
+        健全性バグは実際に見つかっている（2026 年 7 月に 2 件．Lean <a href="https://lean-lang.org/doc/reference/latest/releases/v4.32.1/">4.32.1</a>，<a href="https://lean-lang.org/doc/reference/latest/releases/v4.32.2/">4.32.2</a> で修正）．
+        ただしどちらも，ふつうの証明の中で偶然起きたものでも，悪意ある攻撃に使われたものでもない．
+        研究者がカーネルの穴を探し，専用のメタプログラムで<strong>意図的に</strong> <code>False</code> の証明を作って報告した<span class="muted">（1 件目は AI を使った監査）</span>．
+        だから，独立した実装のカーネルでも再検査する．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>「コンパイルが通った」ら安心か</h2>
+  <div class="cols">
+    <div>
+      <div class="box ng">
+        <h3>仕様のバグ：主張が，意図したものと違う</h3>
+        <ul class="small mb0">
+          <li><strong>ジャンク値</strong>：<code>x / 0 = 0</code>．微分できない点で <code>deriv f x = 0</code>．可積分でなければ <code>∫ f = 0</code>．非有界なら <code>⨆ i, f i = 0</code></li>
+          <li>仮定が空虚（<code>0 &lt; 0</code> など），あるいは結論と同じくらい強い</li>
+          <li>定義が，標準的なものと食い違っている</li>
+        </ul>
+      </div>
+      <div class="box warn">
+        <h3>実装のバグ：証明が，本当は証明になっていない</h3>
+        <ul class="small mb0">
+          <li><code>sorry</code>，新しい <code>axiom</code>，<code>native_decide</code>，<code>unsafe</code>，<code>implemented_by</code></li>
+          <li>カーネルのバグ</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <table class="full">
+        <thead><tr><th>心配</th><th>道具</th></tr></thead>
+        <tbody>
+          <tr><td>どの公理に依存？</td><td><code>#print axioms</code></td></tr>
+          <tr><td><code>sorry</code> は残っていない？</td><td>ビルド時の警告．<code>#print axioms</code> に <code>sorryAx</code></td></tr>
+          <tr><td>カーネルのバグ？</td><td>別実装のカーネルで再検査（<strong>nanoda</strong> など）</td></tr>
+          <tr><td>主張がすり替わっていない？</td><td><strong>Comparator</strong>：<em>信頼できる</em>主張と比較する</td></tr>
+          <tr><td>主張の意味は正しい？</td><td><strong>blueprint</strong>（LeanArchitect）：LaTeX と Lean を並べて，人間が読む</td></tr>
+        </tbody>
+      </table>
+      <div class="box key info small">
+        Comparator と blueprint は，AI に形式化を任せるときに「必ず使うように」と指示する 2 つの道具．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>ジャンク値：証明は正しいが，主張が意図と違う例</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Mathlib の無限和 <code>∑'</code> は全域関数で，<strong>収束しない級数の和は <code>0</code></strong> と定義されている．
+        したがって次は Mathlib の「定理」であり，カーネルも通り，公理も標準の 3 つだけ：</p>
+<pre class="s"><code class="language-lean">import Mathlib
+
+/-- 「調和級数の和は 0 である」 -/
+theorem harmonic_tsum : ∑' n : ℕ, (1 : ℝ) / n = 0 := by
+  apply tsum_eq_zero_of_not_summable
+  simpa using Real.not_summable_natCast_inv
+
+/-- 「|x| の x = 0 での微分係数は 0 である」 -/
+theorem deriv_abs_at_zero : deriv (fun x : ℝ =&gt; |x|) 0 = 0 := by
+  apply deriv_zero_of_not_differentiableAt
+  exact not_differentiableAt_abs_zero
+
+#print axioms harmonic_tsum
+-- 'harmonic_tsum' depends on axioms:
+--   [propext, Classical.choice, Quot.sound]</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li>Lean も Comparator も別実装のカーネルも，この証明を<strong>正しく受理する</strong>（実際，正しい）</li>
+        <li>食い違っているのは，Lean の主張と，人間が docstring から想像する主張</li>
+        <li>この食い違いは，どの検査器にも見えない．気づけるのは<strong>主張を読む人間だけ</strong></li>
+      </ul>
+      <div class="box plain small">
+        <h3>対策</h3>
+        <ul class="mb0">
+          <li>主張に <code>Summable</code>，<code>Integrable</code>，<code>DifferentiableAt</code>，<code>BddAbove</code> などの仮定を明示する</li>
+          <li>ジャンク値のない型（<code>ℝ≥0∞</code> など）を使う</li>
+          <li>AI には「論文の主張から変えた点」を記録させ，それを読む</li>
+        </ul>
+      </div>
+      <p class="note">発散級数に値を割り当てる計算（総和法，正則化）を使うときは，その方法を定義として明示することになる．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>どのように信頼するか：<code>lake comparator</code></h2>
+  <div class="cols">
+    <div>
+      <p class="small">場面：<strong>主張は自分が書き</strong>，証明は<strong>信頼できない相手</strong>（学生，競争相手，AI）が持ってくる．</p>
+<pre class="s" data-file="Challenge.lean — 信頼する（自分で書く．短い）" data-trust="trusted"><code class="language-lean">import Mathlib
+
+theorem sum_first_odds (n : ℕ) :
+    ∑ i ∈ Finset.range n, (2 * i + 1) = n ^ 2 := sorry</code></pre>
+<pre class="s" data-file="Solution.lean — 信頼しない（何を import してもよい）" data-trust="untrusted"><code class="language-lean">import Mathlib
+import MyLibrary
+
+theorem sum_first_odds (n : ℕ) :
+    ∑ i ∈ Finset.range n, (2 * i + 1) = n ^ 2 := by
+  induction n with
+  | zero =&gt; rfl
+  | succ k ih =&gt; rw [Finset.sum_range_succ, ih]; ring</code></pre>
+<pre class="s" data-file="comparator.json"><code class="language-json">{ "challenge_module": "Challenge", "solution_module": "Solution",
+  "theorem_names": ["sum_first_odds"],
+  "permitted_axioms": ["propext", "Quot.sound",
+                       "Classical.choice"] }</code></pre>
+    </div>
+    <div>
+<pre class="l"><code class="language-bash">lake comparator
+# ...
+# Your solution is okay!</code></pre>
+      <p>受理された（終了コード 0）なら，<code>theorem_names</code> に挙げた各定理について</p>
+      <ol>
+        <li>Solution は Challenge と<strong>同じ主張</strong>を証明している</li>
+        <li>証明は，許可した<strong>公理以外を使っていない</strong></li>
+        <li>証明は <strong>Lean のカーネルに受理される</strong><br><span class="small muted">（設定すれば，外部のカーネルにも）</span></li>
+      </ol>
+      <div class="box plain small">
+        もとは Lean FRO が AI 数学コンペの自動採点用に作った単体ツール
+        （<a href="https://github.com/leanprover/comparator">leanprover/comparator</a>）．
+        Lean 4.35 からは Lake のコマンド <code>lake comparator</code> として同梱されている．
+      </div>
+      <p class="note"><code>permitted_axioms</code> に既定値はない．「何を公理として認めるか」が判定の意味そのものなので，出題者が明示する．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2><code>lake comparator</code> の仕組み</h2>
+  <div class="cols c32">
+    <div>
+      <div class="cols tight stretch" style="margin-bottom: 6px;">
+        <div class="flow v">
+          <div class="node trust"><b>Challenge.lean</b><span class="tiny">信頼する．主張だけ（証明は <code>sorry</code>）</span></div>
+          <div class="arrow">↓ <small>ビルド</small></div>
+          <div class="node trust"><b>エクスポート</b><span class="tiny">主張と，そこから辿れる定数すべて</span></div>
+        </div>
+        <div class="flow v">
+          <div class="node untrust"><b>Solution.lean</b><span class="tiny">信頼しない．任意のライブラリを import</span></div>
+          <div class="arrow">↓ <small>サンドボックス（bwrap）の中でビルド</small></div>
+          <div class="node untrust"><b>エクスポート</b><span class="tiny">証明項を含むテキスト．これ以降は不活性なデータ</span></div>
+        </div>
+      </div>
+      <div class="flow v">
+        <div class="arrow">↓</div>
+        <div class="node">
+          <b>① 主張の一致</b>
+          <span class="tiny">各定理の型と，そこに現れる定数（さらにその定義に現れる定数…）が，2 つの環境で完全に同一か</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="node">
+          <b>② 公理の検査</b>
+          <span class="tiny">証明が依存する公理が <code>permitted_axioms</code> に含まれるか（<code>sorryAx</code> や持ち込んだ <code>axiom</code> はここで落ちる）</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="node">
+          <b>③ カーネルで再検査</b>
+          <span class="tiny">エクスポートした環境全体を Lean のカーネルで検査し直す（<code>.olean</code> は信用しない）．<code>external_kernels</code> に nanoda などを足せる</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="node ok"><b>Your solution is okay!</b><span class="tiny">終了コード 0：受理 ／ 1：拒否 ／ 2：起動できず</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="box trust small">
+        <h3>信頼するもの</h3>
+        <ul class="mb0">
+          <li>Challenge とその import（主張の「語彙」）</li>
+          <li>Lean のカーネル（か，併用したカーネルのどれか）</li>
+          <li>サンドボックス，OS，Mathlib のキャッシュ</li>
+        </ul>
+      </div>
+      <div class="box untrust small">
+        <h3>信頼しないもの</h3>
+        <ul class="mb0">
+          <li>Solution が import・ビルドするものすべて</li>
+          <li>タクティック，エラボレータ，<code>.olean</code></li>
+        </ul>
+      </div>
+      <ul class="tiny">
+        <li>ビルド中は Solution 側のコードが実行されうるので，ネットワークを遮断し，ホームディレクトリを隠した箱の中で行う</li>
+        <li><code>--paranoid</code>：同梱の外部検査器（<code>leanchecker-paranoid</code>，<code>lean4lean</code>，<code>nanoda</code>，<code>con-leche</code>，<code>con-ron</code>）もすべて実行する</li>
+        <li><code>--solution-from-export</code>：別の計算機で作ったエクスポートを判定だけする<span class="muted">（巨大な証明向け）</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>他人が書いた Lean の証明を，いつ信じてよいか</h2>
+  <div class="cols c32">
+    <div>
+      <table class="full check">
+        <thead><tr><th></th><th>確かめること</th><th>方法</th><th>検査するもの</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td class="no">1</td><td><strong>主張は，意図した数学の主張か</strong></td>
+            <td>定理の主張と，そこに現れる定義を読む．短く，Mathlib の語彙だけで書かれているほどよい</td><td class="who"><strong>人間</strong></td></tr>
+          <tr><td class="no">2</td><td>証明に穴はないか</td>
+            <td>手元でゼロからビルドする．エラーなし，<code>sorry</code> なし</td><td class="who">Lean</td></tr>
+          <tr><td class="no">3</td><td>余計な公理を使っていないか</td>
+            <td><code>#print axioms</code> の結果が <code>propext</code>，<code>Quot.sound</code>，<code>Classical.choice</code> だけ</td><td class="who">Lean</td></tr>
+          <tr><td class="no">4</td><td>主張がすり替わっていないか</td>
+            <td>信頼できる主張（Challenge）を別に用意し，<code>lake comparator</code> で比較する</td><td class="who">Comparator</td></tr>
+          <tr><td class="no">5</td><td>カーネルのバグではないか</td>
+            <td>別実装のカーネル（nanoda，lean4lean など）でも再検査する</td><td class="who">外部の検査器</td></tr>
+          <tr class="hl"><td class="no">6</td><td><strong>定義は妥当か</strong><br><span class="muted">ジャンク値，規約，論文との対応</span></td>
+            <td>定義を数学として読む．blueprint で LaTeX と見比べる．専門家が査読する</td><td class="who"><strong>人間</strong></td></tr>
+        </tbody>
+      </table>
+      <div class="box key info small">
+        信じてよいのは，<strong>主張と定義を読み（1，6）</strong>，<strong>2〜5 を自分で，または信頼できる第三者が再実行したとき</strong>．
+        2〜5 は機械的で，誰がやっても同じ結果になる．
+      </div>
+    </div>
+    <div>
+      <div class="box trust small">
+        <h3>なぜ信じられるか</h3>
+        <ul class="mb0">
+          <li>形式証明には行間がない．検査は，推論規則に合っているかを見るだけの計算（型検査）</li>
+          <li>その計算をするのは，小さなカーネル．証明の書き手（人，AI，タクティック）を信頼する必要がない</li>
+          <li>検査は誰でも再実行できる</li>
+        </ul>
+      </div>
+      <div class="box warn small">
+        <h3>それでも保証されないこと</h3>
+        <ul class="mb0">
+          <li>定理の<strong>名前</strong>と <strong>docstring</strong>（どちらも検査されない）</li>
+          <li>Lean の主張が，論文や教科書の主張と同じであること</li>
+          <li>途中の補題が，名前のとおりの意味であること</li>
+          <li>その定理が新しいこと，重要であること</li>
+        </ul>
+      </div>
+      <p class="note">証明が何万行あっても，人間が読む量は 1 と 6 だけ．逆に言えば，1 と 6 が長く複雑な形式化は，信じるための手間が大きい．</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     4. AI を使わない形式化
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">4</div>
+  <h2>AI を使わない形式化</h2>
+  <p>環境を作り，<code>lake new … math</code> でプロジェクトを始め，ゴールを見ながら 1 行ずつ書く</p>
+</section>
+
+<section class="slide">
+  <h2><code class="language-bash">lake new my_project math</code></h2>
+  <div class="cols">
+    <div>
+      <h3 class="rule">準備：環境構築（公式の手順どおり）</h3>
+      <ol class="small">
+        <li><strong>VS Code</strong> を入れる</li>
+        <li>拡張機能 <strong>Lean 4</strong>（<code>leanprover.lean4</code>）を入れる</li>
+        <li>拡張機能の Setup Guide に従う<br>
+          <span class="muted">→ <strong>elan</strong>（Lean のバージョン管理）と <strong>lake</strong>（ビルドツール）が入る</span></li>
+      </ol>
+      <p class="note">公式：<a href="https://lean-lang.org/install/">lean-lang.org/install</a>　／　日本語の手順書（チェックリスト，リカバリー，Codespaces）：<a href="https://shosonoda.github.io/lean-install/">shosonoda.github.io/lean-install</a></p>
+      <h3 class="rule">プロジェクトを作る</h3>
+<pre><code class="language-bash">lake new my_project math    # Mathlib つきのひな形を作る
+cd my_project
+lake build                  # 自分のファイルをビルドする
+code .                      # VS Code で開く</code></pre>
+      <p class="note"><code>math</code> は「Mathlib に依存するプロジェクト」のひな形．Lean 4.36 では，この 1 行で依存関係の解決と<strong>ビルド済みの Mathlib の取得</strong>まで行われる
+        <span class="muted">（後から取り直すときは <code>lake exe cache get</code>）</span>．
+        Mathlib を自分でビルドしないこと（数時間かかる）．ディスクは約 7 GB 必要．</p>
+    </div>
+    <div>
+<pre class="s" data-nocopy><code class="language-bash">my_project/
+  lakefile.toml        # パッケージ名，依存ライブラリ
+  lean-toolchain       # Lean のバージョン（v4.36.0）
+  lake-manifest.json   # 依存ライブラリの版を固定したもの
+  MyProject.lean       # ルート．すべてのファイルを import する
+  MyProject/
+    Basic.lean         # モジュール MyProject.Basic
+  .lake/               # ビルド結果と依存ライブラリ
+  .github/workflows/   # GitHub Actions（CI）の設定</code></pre>
+<pre class="s" data-file="MyProject/Basic.lean（中身を書き換える）"><code class="language-lean">import Mathlib
+
+def IsEven (n : ℕ) : Prop := ∃ k : ℕ, n = 2 * k
+
+theorem six_is_even : IsEven 6 := by
+  use 3</code></pre>
+      <ul class="small">
+        <li>ファイルのパスがモジュール名になる：<br><code>MyProject/Basic.lean</code> ↔ <code>import MyProject.Basic</code></li>
+        <li>Lean は<strong>バージョンを厳密に合わせる</strong>．<code>lean-toolchain</code> を elan が読んで自動で切り替える</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>日々の作業</h2>
+  <div class="cols">
+    <div>
+      <ol>
+        <li><strong>主張を書く</strong>（証明は <code>sorry</code>）<span class="small muted">— ここが一番難しい</span></li>
+        <li><strong>ゴールを見る</strong>：Infoview を見ながら 1 行ずつ進める</li>
+        <li><strong>補題を探す</strong>
+          <ul class="small">
+            <li>Lean の中で：<code>exact?</code>，<code>apply?</code>，<code>rw?</code>，<code>simp?</code></li>
+            <li>検索：Loogle（型のパターン），LeanSearch（自然言語），Mathlib のドキュメント</li>
+            <li>名前から推測：<code>add_comm</code>，<code>mul_le_mul_left</code>，<code>integral_add</code></li>
+          </ul>
+        </li>
+        <li><strong>退屈な部分は自動化</strong>に任せる<br>
+          <span class="small"><code>simp</code>，<code>ring</code>，<code>linarith</code>，<code>nlinarith</code>，<code>positivity</code>，<code>omega</code>，<code>norm_num</code>，<code>fun_prop</code>，<code>aesop</code>，<code>grind</code></span></li>
+        <li><strong>聞く</strong>：Lean Zulip（#new members）</li>
+      </ol>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">example (a b : ℝ) : a * b ≤ (a ^ 2 + b ^ 2) / 2 := by
+  nlinarith [sq_nonneg (a - b)]     -- (a - b)² ≥ 0 を使えば示せる
+
+example (s : Finset ℕ) : ∑ i ∈ s, (2 * i) = 2 * ∑ i ∈ s, i := by
+  rw [Finset.mul_sum]               -- 定数倍を和の外に出す
+
+example (f : ℝ → ℝ) (hf : Continuous f) :
+    Continuous fun x ↦ f (x + 1) := by
+  fun_prop                          -- 連続性などを自動で示す</code></pre>
+      <h3 class="rule">学習資料</h3>
+      <ul class="small">
+        <li><a href="https://shosonoda.github.io/lean-math-note/">数学系エンドユーザーのための Lean 入門</a>（講義ノート．命題論理から測度論・積分まで）</li>
+        <li><em>Mathematics in Lean</em>（Avigad–Massot），<em>Theorem Proving in Lean 4</em></li>
+        <li><a href="https://www.lambdanote.com/products/leanbook">ゼロから始める Lean 言語入門</a>（井上亜星，ラムダノート），Lean by Example（日本語）</li>
+        <li><em>The Lean Language Reference</em>（公式リファレンス）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Mathlib の読み方</h2>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li><strong>構造は型クラスで表す</strong>：「群 $G$」は <code>(G : Type*) [Group G]</code>．<br>
+          「$K$ 上のベクトル空間 $V$」は <code>[Field K] [AddCommGroup V] [Module K V]</code></li>
+        <li><strong>写像や部分対象は束ねて扱う</strong>：<code>G →* H</code>（群準同型），<code>V →ₗ[K] W</code>（線形写像），<code>Submodule K V</code>（部分空間）</li>
+        <li><strong>極限はフィルターで書く</strong>：<code>Tendsto f atTop (𝓝 L)</code> は「$n \to \infty$ で $f_n \to L$」</li>
+        <li><strong>測度論</strong>：<code>Measure Ω</code>，<code>IsProbabilityMeasure μ</code>，<code>∫ x, f x ∂μ</code>（Bochner 積分）</li>
+        <li><strong>全域関数とジャンク値</strong>：割り算も微分も積分もどこでも定義されている．
+          その代わり，定理の側に仮定（<code>DifferentiableAt</code>，<code>Integrable</code> など）が付く</li>
+        <li><strong>命名規則</strong>：<code>結論_of_仮定</code>．例：<code>le_of_lt</code>，<code>Integrable.of_bound</code></li>
+      </ul>
+    </div>
+    <div>
+      <p class="small">確率空間 $(\Omega, \mu)$ 上の可積分な確率変数 $X$ について $\mathbb{E}[X + c] = \mathbb{E}[X] + c$：</p>
+<pre class="s"><code class="language-lean">open MeasureTheory ProbabilityTheory
+
+example {Ω : Type*} [MeasurableSpace Ω] (μ : Measure Ω)
+    [IsProbabilityMeasure μ] (X : Ω → ℝ) (hX : Integrable X μ)
+    (c : ℝ) : μ[fun ω ↦ X ω + c] = μ[X] + c := by
+  simp [integral_add hX (integrable_const c)]</code></pre>
+      <p class="small">$f_n \to L$ ならば $2 f_n \to 2L$：</p>
+<pre class="s"><code class="language-lean">open Filter in
+example (f : ℕ → ℝ) (L : ℝ) (h : Tendsto f atTop (nhds L)) :
+    Tendsto (fun n ↦ 2 * f n) atTop (nhds (2 * L)) :=
+  h.const_mul 2</code></pre>
+      <p class="note"><code>integral_add</code> は 2 つの被積分関数がどちらも可積分であることを要求する．「$X$ は可積分」と「定数は可積分」を渡している．</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     5. AI を使った形式化
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">5</div>
+  <h2>AI を使った形式化</h2>
+  <p>LeanArchitect と Comparator を使うように指示して，待つ</p>
+</section>
+
+<section class="slide">
+  <h2>Lean を書く 2 種類の AI</h2>
+  <div class="cols">
+    <div>
+      <div class="box">
+        <h3>証明器（Lean 専用に訓練したモデル）</h3>
+        <ul class="small mb0">
+          <li>DeepSeek-Prover，Kimina-Prover，Goedel-Prover，Seed-Prover，Aristotle（Harmonic），Gauss（Math Inc）など</li>
+          <li>ベンチマーク：miniF2F（高校），PutnamBench（学部），Formal Conjectures（未解決問題）</li>
+          <li>与えられた主張の証明を探索する．Lean が報酬信号</li>
+        </ul>
+      </div>
+      <div class="box info">
+        <h3>コーディングエージェント（汎用）</h3>
+        <ul class="small mb0">
+          <li>Claude Code，Codex など</li>
+          <li><strong>定義も書く</strong>．ファイルを整理し，スクリプトを走らせ，blueprint も書く</li>
+          <li>論文をまるごと形式化する現在のやり方は，こちら</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <svg viewBox="0 0 560 124" role="img" aria-label="AI エージェントと Lean の間のループ" style="width: 100%; margin-bottom: 10px;">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#4a4f57"/>
+          </marker>
+        </defs>
+        <rect x="2" y="28" width="176" height="68" rx="8" fill="#fff" stroke="#d9dde3" stroke-width="1.5"/>
+        <text x="90" y="58" text-anchor="middle" font-size="18" font-weight="700" fill="#1b1d21">AI エージェント</text>
+        <text x="90" y="80" text-anchor="middle" font-size="13" fill="#4a4f57">Lean を書く・直す</text>
+        <rect x="382" y="28" width="176" height="68" rx="8" fill="#e8f0fc" stroke="#7fa8e6" stroke-width="1.5"/>
+        <text x="470" y="58" text-anchor="middle" font-size="18" font-weight="700" fill="#1b1d21">Lean</text>
+        <text x="470" y="80" text-anchor="middle" font-size="13" fill="#4a4f57">lake build で検査</text>
+        <path d="M184,46 L376,46" fill="none" stroke="#4a4f57" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="280" y="36" text-anchor="middle" font-size="14" fill="#1b1d21">Lean のコード</text>
+        <path d="M376,80 L184,80" fill="none" stroke="#4a4f57" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="280" y="102" text-anchor="middle" font-size="14" fill="#1b1d21">エラー，残りのゴール</text>
+        <text x="280" y="120" text-anchor="middle" font-size="12.5" fill="#7a808a">通るまで繰り返す</text>
+      </svg>
+      <h3 class="rule">なぜ Lean は AI と相性が良いか</h3>
+      <ul class="small">
+        <li>カーネルは誤った証明を決して受理しない<br>→ エージェントを<strong>監視なしで何時間も</strong>走らせられる</li>
+        <li>エラーメッセージとゴールが，正確なフィードバックになる</li>
+        <li>Mathlib が語彙を提供する．エージェントも人間と同じ道具で検索する</li>
+      </ul>
+      <div class="box ng small">
+        AI にできないこと：Lean の<strong>主張</strong>が，あなたの意図したものかどうかを決めること．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>進め方：指示して，待つ</h2>
+  <div class="cols">
+    <div>
+      <p class="small">エージェントに渡すもの：① 論文（LaTeX ソース），② <strong>LeanArchitect</strong> と <strong>Comparator</strong> を組み込んだプロジェクトのひな形，
+        ③ 規約を書いたファイル（<code>AGENTS.md</code>），④ 指示</p>
+<pre class="s wrap" data-file="指示の例"><code class="language-text">添付の論文の定理 1〜3 を，このプロジェクトで形式化してください．
+- 定義は Defs.lean，定理は Main.lean に置く．
+- すべての定義と定理に
+    @[blueprint "ラベル" (statement := /-- LaTeX -/)]
+  を付ける．ラベルは論文のものを使う．証明の各段階に
+  docstring で説明を書く．
+- sorry と新しい axiom は使わない．#print axioms の結果は
+  propext, Classical.choice, Quot.sound だけであること．
+- 終わったら，Challenge.lean（主張のみ．Defs だけを import），
+  Solution.lean，comparator.json を書き，lake comparator を
+  実行して結果を記録する．
+- 論文の主張から変えた点は，すべて ToDraft.md に記録する．</code></pre>
+    </div>
+    <div>
+      <p>あとは待つ（論文によって数分〜数日）．その間エージェントは</p>
+      <ul class="small">
+        <li>論文を読み，モジュール構成を計画する</li>
+        <li>1 ファイルずつ <code>lake env lean</code> で確かめ，<code>lake build</code> で全体を確かめる</li>
+        <li>Mathlib を検索し，足りない補題は自分で証明する</li>
+        <li>論文どおりには示せなかった箇所を記録する<br>
+          <span class="muted">（仮定を足した，主張が誤っていた，など）</span></li>
+        <li>blueprint を生成し，Comparator を実行し，結果のページを作る</li>
+        <li>ファイル単位でサブエージェントに分担させる</li>
+      </ul>
+      <p class="note">ディレクトリ構成，<code>AGENTS.md</code>，<code>ToDraft.md</code> は我々のひな形（<a href="https://github.com/shosonoda/temp-lean-architect">TempLeanArchitect</a>）の取り決めで，Lean や Lake が要求するものではない．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>LeanArchitect：blueprint を Lean のソースから作る</h2>
+  <div class="cols">
+    <div>
+<pre class="xs"><code class="language-lean">import Mathlib
+import Architect
+
+@[blueprint "def:is-even"
+  (statement := /-- $n = 2k$ となる $k$ があるとき，$n$ は偶数という． -/)]
+def IsEven (n : ℕ) : Prop := ∃ k : ℕ, n = 2 * k
+
+@[blueprint "thm:double-even"
+  (statement := /-- 任意の $n$ について $2n$ は偶数である． -/)]
+theorem double_even (n : ℕ) : IsEven (2 * n) := by
+  /-- $k = n$ ととればよい． -/
+  exact ⟨n, rfl⟩</code></pre>
+<pre class="s" data-file="blueprint/src/content.tex"><code class="language-latex">\chapter{偶数}
+\inputleannode{def:is-even}
+\inputleannode{thm:double-even}</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li><code>@[blueprint]</code> を付けた宣言が，blueprint のノードになる</li>
+        <li>依存関係（<code>\uses</code>）は，主張と証明に現れる定数から<strong>自動で推定</strong>される</li>
+        <li>証明に <code>sorry</code> がなければ，「証明済み」の印（<code>\leanok</code>）が自動で付く</li>
+        <li>証明の中の docstring が，証明の概略になる</li>
+      </ul>
+      <div class="box key info small">
+        LaTeX の文書と依存グラフが，<strong>常にコードと同期する</strong>．
+        主張の LaTeX を別に手書きしないので，ずれが生じない．
+        各ノードから Lean の宣言へリンクが張られる．
+      </div>
+      <p class="note">LeanArchitect（<a href="https://github.com/hanwenzhu/LeanArchitect">hanwenzhu/LeanArchitect</a>）と leanblueprint（<a href="https://github.com/PatrickMassot/leanblueprint">PatrickMassot/leanblueprint</a>）は Lean 本体とは別の，コミュニティ製のツール．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>最後に Comparator で確かめる</h2>
+  <div class="cols">
+    <div>
+<pre class="s" data-file="Challenge.lean — 定義だけを import する" data-trust="trusted"><code class="language-lean">import MyProject.Defs
+namespace MyProject.Challenge
+theorem thm_main (n : ℕ) : IsEven (2 * n) := sorry
+end MyProject.Challenge</code></pre>
+<pre class="s" data-file="Solution.lean — ライブラリ全体を import する" data-trust="untrusted"><code class="language-lean">import MyProject
+namespace MyProject.Challenge
+theorem thm_main (n : ℕ) : IsEven (2 * n) :=
+  MyProject.double_even n
+end MyProject.Challenge</code></pre>
+<pre class="s"><code class="language-bash">lake comparator            # comparator.json を読む
+# ... Your solution is okay!</code></pre>
+    </div>
+    <div>
+      <h3 class="rule">AI が証明を書いたとき，なぜこれが効くか</h3>
+      <ul class="small">
+        <li><strong>Challenge は短く，人間が読める</strong>：論文の主張を，定義モジュールの上で述べただけのもの</li>
+        <li>人間が読むべきものは，Challenge とその import（定義）だけ</li>
+        <li>エージェントが書いた何千行もの補題は，人間ではなく<strong>カーネルが読む</strong></li>
+        <li>公理も設定で固定される．<code>sorry</code> や持ち込まれた <code>axiom</code> があれば落ちる</li>
+      </ul>
+      <div class="box plain small">
+        信頼の度合いを決める 2 つの設計：
+        <ol class="mb0">
+          <li><strong>Challenge が何を import するか</strong>．Mathlib だけ，が最良．自前の定義モジュールでも，短く査読済みなら可</li>
+          <li><strong>主張を誰が書いたか</strong>．第三者が書いたもの，教科書の主張を一字一句写したものが望ましい</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>それでも人間が確認すること</h2>
+  <ul>
+    <li><strong>主張</strong>：Challenge と定義モジュールを，数学として読む．仮定は論文と同じか．空虚な仮定はないか．定義が弱いものにすり替わっていないか</li>
+    <li><strong>ジャンク値</strong>：可積分でない関数の積分，非有界な上限，ゼロ除算．エージェントは正しい仮定を足したか．それとも既定値を悪用したか</li>
+    <li><strong>名前と docstring</strong>：これらは何も検査されない．<code>main_theorem</code> や <code>riemann_hypothesis</code> という名前の定理が，どんな主張の上にも置ける．
+      <span class="small muted">「名前と主張が食い違うときは，証明されたのは主張のほうである」（FLT の README）</span></li>
+    <li><strong>論文からの逸脱</strong>：これを記録する道具はない．変えた主張をすべて記録させて，読む．エージェントが論文どおりに証明できなかった主張は，しばしば<strong>論文の本当の誤り</strong>である</li>
+    <li><strong>残った <code>sorry</code></strong>：主結果ごとに <code>#print axioms</code>．ライブラリ全体については，全宣言を許可リストと照合するスクリプトを書かせて CI で回す</li>
+  </ul>
+  <div class="box key info center"><strong>それ以外のすべて — 証明 — は，カーネルの仕事．</strong></div>
+</section>
+
+<!-- ======================================================================
+     6. 具体例
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">6</div>
+  <h2>具体例：物理数学と制御理論</h2>
+  <p>よく知られた事実を Lean で述べ，証明してみる．何を仮定し，何を示したかが主張に現れる</p>
+</section>
+
+<section class="slide">
+  <h2>物理数学の例 (1)：正準交換関係は有限次元では実現できない</h2>
+  <div class="cols c23">
+    <div>
+      <p>量子力学の正準交換関係</p>
+      $$ [X, P] = XP - PX = i\hbar\, I $$
+      <p>を満たす $n \times n$ 行列 $X, P$ は存在しない．</p>
+      <div class="box plain small">
+        <strong>証明．</strong>両辺のトレースをとる．<br>
+        左辺：$\mathrm{tr}(XP) = \mathrm{tr}(PX)$ なので $0$．<br>
+        右辺：$\mathrm{tr}(i\hbar I) = i\hbar\, n \neq 0$．矛盾．$\blacksquare$
+      </div>
+      <ul class="small">
+        <li>だから位置と運動量は，無限次元空間上の（非有界な）作用素でなければならない</li>
+        <li>Lean の証明は，紙の証明と<strong>同じ 3 行</strong></li>
+        <li><code>[NeZero n]</code>（$n \neq 0$）を忘れると，証明は通らない．
+          $0 \times 0$ 行列では両辺が等しく，主張が<strong>偽</strong>だから</li>
+        <li>公理は標準の 3 つだけ（<code>#print axioms</code> で確認）</li>
+      </ul>
+    </div>
+    <div>
+<pre><code class="language-lean">import Mathlib
+open Matrix Complex
+
+/-- 正準交換関係 [X, P] = iħ は，有限次元の行列では実現できない． -/
+theorem no_finite_dim_ccr {n : ℕ} [NeZero n] (ħ : ℝ) (hħ : ħ ≠ 0)
+    (X P : Matrix (Fin n) (Fin n) ℂ) :
+    X * P - P * X ≠ (I * ħ) • (1 : Matrix (Fin n) (Fin n) ℂ) := by
+  intro h
+  -- 両辺のトレースをとる
+  have ht := congrArg trace h
+  -- 左辺：tr(XP) = tr(PX) なので 0．右辺：iħ · n
+  rw [trace_sub, trace_mul_comm, sub_self, trace_smul, trace_one] at ht
+  -- 0 = iħ · n は，ħ ≠ 0 かつ n ≠ 0 に矛盾する
+  simp [hħ, NeZero.ne n] at ht</code></pre>
+      <table class="full compact">
+        <thead><tr><th>紙の証明の 1 歩</th><th>Lean</th></tr></thead>
+        <tbody>
+          <tr><td>「等式が成り立つと仮定する」</td><td><code>intro h</code></td></tr>
+          <tr><td>「両辺のトレースをとる」</td><td><code>congrArg trace h</code></td></tr>
+          <tr><td>$\mathrm{tr}(XP) = \mathrm{tr}(PX)$</td><td><code>trace_mul_comm</code>（Mathlib の補題）</td></tr>
+          <tr><td>「$i\hbar n \ne 0$ なので矛盾」</td><td><code>simp [hħ, NeZero.ne n]</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>物理数学の例 (2)：級数の計算と Fourier 変換</h2>
+  <div class="cols">
+    <div>
+      <p class="small">量子調和振動子の分配関数（$x = \beta\hbar\omega &gt; 0$）：</p>
+      $$ Z = \sum_{n=0}^{\infty} e^{-x\,(n + \frac12)} = \frac{e^{-x/2}}{1 - e^{-x}} $$
+<pre class="xs"><code class="language-lean">open Real in
+theorem oscillator_partition (x : ℝ) (hx : 0 &lt; x) :
+    ∑' n : ℕ, exp (-x * (n + 1 / 2))
+      = exp (-x / 2) / (1 - exp (-x)) := by
+  -- 各項を「定数 × (e^{-x})^n」の形に直す
+  have h : ∀ n : ℕ, exp (-x * (n + 1 / 2))
+      = exp (-x / 2) * exp (-x) ^ n := by
+    intro n
+    rw [← exp_nat_mul, ← exp_add]
+    congr 1
+    ring
+  -- 公比 e^{-x} は 1 未満（ここで x &gt; 0 を使う）
+  have hr : exp (-x) &lt; 1 := exp_lt_one_iff.mpr (by linarith)
+  -- 等比級数の和の公式
+  simp_rw [h, tsum_mul_left,
+    tsum_geometric_of_lt_one (exp_pos _).le hr]
+  rfl</code></pre>
+      <p class="note">紙の計算と同じ 3 歩（項の変形，公比の確認，等比級数の公式）．「公比が 1 未満」は省略できない：
+        公式 <code>tsum_geometric_of_lt_one</code> が証明 <code>hr</code> を要求し，そこで仮定 $x &gt; 0$ が使われる．</p>
+    </div>
+    <div>
+      <p class="small">Gauss 関数 $e^{-\pi x^2}$ は，Fourier 変換で自分自身に移る：</p>
+<pre class="xs"><code class="language-lean">open Real Complex FourierTransform in
+theorem fourier_gaussian_self :
+    (𝓕 fun x : ℝ =&gt; cexp (-π * x ^ 2))
+      = fun t : ℝ =&gt; cexp (-π * t ^ 2) := by
+  simpa using fourier_gaussian_pi (b := 1) (by simp)</code></pre>
+      <p class="note">Mathlib の定理 <code>fourier_gaussian_pi</code>（$e^{-\pi b x^2}$ の Fourier 変換．仮定 <code>0 &lt; b.re</code>）に $b = 1$ を代入しただけ．</p>
+      <table class="full compact" style="font-size: .74em;">
+        <thead><tr><th>物理でよく使う道具</th><th>Mathlib での名前</th></tr></thead>
+        <tbody>
+          <tr><td>等比級数の和</td><td><code>tsum_geometric_of_lt_one</code></td></tr>
+          <tr><td>$\zeta(2) = \pi^2/6$，$\zeta(4) = \pi^4/90$</td><td><code>hasSum_zeta_two</code>，<code>hasSum_zeta_four</code></td></tr>
+          <tr><td>Gauss 積分</td><td><code>integral_gaussian</code></td></tr>
+          <tr><td>Gauss 関数の Fourier 変換</td><td><code>fourier_gaussian_pi</code></td></tr>
+          <tr><td>Hermite 行列の固有値</td><td><code>Matrix.IsHermitian.eigenvalues</code></td></tr>
+          <tr><td>スペクトル定理（有限次元）</td><td><code>Matrix.IsHermitian.spectral_theorem</code></td></tr>
+          <tr><td>行列の指数関数</td><td><code>NormedSpace.exp</code></td></tr>
+          <tr><td>Hilbert 空間，内積</td><td><code>InnerProductSpace</code></td></tr>
+          <tr><td>常微分方程式の解の一意性</td><td><code>ODE_solution_unique</code></td></tr>
+        </tbody>
+      </table>
+      <p class="note">Hermite 行列の固有値 <code>eigenvalues</code> は，型が <code>n → ℝ</code>．「観測量の固有値は実数」は，定理というより型に書いてある．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>制御理論の例 (1)：エネルギーは Lyapunov 関数</h2>
+  <div class="cols c23">
+    <div>
+      <p class="small">減衰振動子（$\gamma \ge 0$）を状態方程式で書く：</p>
+      $$ \dot x = v, \qquad \dot v = -\omega^2 x - \gamma v $$
+      <p class="small">Lyapunov 関数の候補として，力学的エネルギーをとる：</p>
+      $$ E = \tfrac12 v^2 + \tfrac12 \omega^2 x^2, \qquad \dot E = -\gamma v^2 \le 0 $$
+      <div class="cols tight middle" style="grid-template-columns: 200px 1fr;">
+        <figure>
+          <svg viewBox="0 0 230 230" role="img" aria-label="減衰振動子の位相図" style="width: 200px;">
+          <circle cx="115.0" cy="115.0" r="96.0" fill="none" stroke="#c9ced6" stroke-width="1" stroke-dasharray="4 4"/>
+          <circle cx="115.0" cy="115.0" r="63.4" fill="none" stroke="#c9ced6" stroke-width="1" stroke-dasharray="4 4"/>
+          <circle cx="115.0" cy="115.0" r="31.7" fill="none" stroke="#c9ced6" stroke-width="1" stroke-dasharray="4 4"/>
+          <line x1="6" x2="224" y1="115.0" y2="115.0" stroke="#7a808a" stroke-width="1"/>
+          <line x1="115.0" x2="115.0" y1="6" y2="224" stroke="#7a808a" stroke-width="1"/>
+          <path d="M211.0,115.0 L211.0,116.0 L210.6,123.5 L209.6,130.9 L208.1,138.1 L205.9,145.0 L203.3,151.6 L200.1,157.8 L196.4,163.7 L192.3,169.1 L187.8,174.1 L182.9,178.7 L177.6,182.8 L172.0,186.3 L166.2,189.4 L160.2,191.9 L153.9,193.9 L147.5,195.3 L141.1,196.3 L134.6,196.7 L128.0,196.5 L121.5,195.9 L115.1,194.7 L108.8,193.1 L102.6,191.0 L96.6,188.4 L90.9,185.5 L85.4,182.1 L80.2,178.4 L75.2,174.3 L70.7,169.9 L66.5,165.3 L62.6,160.4 L59.2,155.3 L56.2,150.1 L53.6,144.7 L51.4,139.2 L49.7,133.7 L48.4,128.1 L47.6,122.6 L47.2,117.1 L47.3,111.7 L47.8,106.4 L48.6,101.2 L50.0,96.3 L51.6,91.5 L53.7,87.0 L56.1,82.7 L58.9,78.7 L61.9,75.0 L65.3,71.6 L68.9,68.6 L72.7,65.9 L76.7,63.5 L80.9,61.6 L85.3,60.0 L89.7,58.7 L94.2,57.9 L98.8,57.4 L103.4,57.3 L108.1,57.6 L112.6,58.2 L117.1,59.2 L121.5,60.5 L125.8,62.2 L130.0,64.1 L134.0,66.4 L137.8,68.9 L141.3,71.6 L144.7,74.6 L147.8,77.8 L150.6,81.1 L153.2,84.7 L155.5,88.3 L157.5,92.1 L159.2,95.9 L160.5,99.8 L161.6,103.7 L162.3,107.6 L162.8,111.5 L162.9,115.4 L162.7,119.2 L162.2,122.9 L161.4,126.5 L160.4,129.9 L159.1,133.2 L157.5,136.3 L155.7,139.2 L153.6,142.0 L151.4,144.5 L148.9,146.7 L146.3,148.8 L143.5,150.5 L140.6,152.1 L137.6,153.3 L134.5,154.3 L131.3,155.1 L128.1,155.5 L124.8,155.7 L121.6,155.7 L118.3,155.4 L115.1,154.8 L112.0,154.0 L108.9,152.9 L105.9,151.7 L103.0,150.2 L100.3,148.5 L97.7,146.7 L95.2,144.6 L92.9,142.5 L90.8,140.1 L88.9,137.7 L87.2,135.2 L85.7,132.6 L84.4,129.9 L83.3,127.1 L82.4,124.4 L81.8,121.6 L81.4,118.8 L81.2,116.1 L81.2,113.4 L81.4,110.8 L81.9,108.2 L82.5,105.7 L83.4,103.3 L84.4,101.1 L85.6,98.9 L87.0,96.9 L88.5,95.1 L90.2,93.4 L91.9,91.9 L93.9,90.5 L95.9,89.3 L98.0,88.4 L100.1,87.6 L102.3,86.9 L104.6,86.5 L106.9,86.3 L109.2,86.2 L111.5,86.4 L113.8,86.7 L116.0,87.2 L118.2,87.8 L120.4,88.6 L122.4,89.6 L124.4,90.7 L126.3,92.0 L128.1,93.3 L129.8,94.8 L131.3,96.4 L132.8,98.1 L134.0,99.8 L135.2,101.7 L136.2,103.5 L137.0,105.4 L137.7,107.4 L138.2,109.3 L138.6,111.3 L138.8,113.2 L138.9,115.2 L138.8,117.1 L138.6,118.9 L138.2,120.7 L137.7,122.4 L137.0,124.0 L136.2,125.6 L135.3,127.1 L134.3,128.4 L133.2,129.7 L131.9,130.8 L130.6,131.8 L129.3,132.7 L127.8,133.5 L126.3,134.1 L124.7,134.6 L123.2,135.0 L121.6,135.2 L119.9,135.3 L118.3,135.3 L116.7,135.1 L115.1,134.9 L113.5,134.5 L112.0,133.9 L110.5,133.3 L109.1,132.6 L107.7,131.7 L106.4,130.8 L105.2,129.8 L104.0,128.7 L103.0,127.6 L102.0,126.4 L101.1,125.1 L100.4,123.8 L99.7,122.4 L99.2,121.1 L98.8,119.7 L98.4,118.3 L98.2,116.9 L98.1,115.6 L98.1,114.2 L98.3,112.9 L98.5,111.6 L98.8,110.4 L99.2,109.2 L99.7,108.1 L100.3,107.0 L101.0,106.0 L101.8,105.1 L102.6,104.2 L103.5,103.5 L104.4,102.8 L105.4,102.2 L106.5,101.7 L107.6,101.3 L108.7,101.0 L109.8,100.8 L110.9,100.7 L112.1,100.6 L113.2,100.7 L114.4,100.9 L115.5,101.1 L116.6,101.4 L117.7,101.8 L118.7,102.3 L119.7,102.9 L120.6,103.5 L121.5,104.2 L122.4,104.9 L123.1,105.7 L123.8,106.5 L124.5,107.4 L125.1,108.3 L125.6,109.3 L126.0,110.2 L126.3,111.2 L126.6,112.2 L126.8,113.1 L126.9,114.1 L126.9,115.1 L126.9,116.0 L126.8,116.9 L126.6,117.8 L126.3,118.7 L126.0,119.5 L125.6,120.3 L125.1,121.0 L124.6,121.7 L124.1,122.3 L123.5,122.9 L122.8,123.4 L122.1,123.8 L121.4,124.2 L120.7,124.5 L119.9,124.8 L119.1,125.0 L118.3,125.1 L117.5,125.1 L116.7,125.1 L115.9,125.0 L115.1,124.9 L114.3,124.7 L113.5,124.5 L112.8,124.1 L112.0,123.8 L111.4,123.4 L110.7,122.9 L110.1,122.4 L109.5,121.9 L109.0,121.3 L108.5,120.7 L108.1,120.0 L107.7,119.4 L107.4,118.7 L107.1,118.0 L106.9,117.4 L106.7,116.7 L106.6,116.0 L106.6,115.3 L106.6,114.6 L106.6,114.0 L106.8,113.3 L106.9,112.7 L107.1,112.1 L107.4,111.6 L107.7,111.0 L108.0,110.5 L108.4,110.1 L108.8,109.6 L109.2,109.3 L109.7,108.9 L110.2,108.6 L110.7,108.4 L111.3,108.2 L111.8,108.0 L112.4,107.9 L113.0,107.9 L113.5,107.8 L114.1,107.9 L114.7,107.9 L115.2,108.1 L115.8,108.2 L116.3,108.4 L116.8,108.7 L117.3,108.9 L117.8,109.3 L118.2,109.6 L118.7,110.0 L119.1,110.4 L119.4,110.8 L119.7,111.2 L120.0,111.7 L120.3,112.1 L120.5,112.6 L120.6,113.1 L120.8,113.6 L120.9,114.1 L120.9,114.5 L120.9,115.0 L120.9,115.5 L120.9,116.0 L120.8,116.4 L120.6,116.8 L120.5,117.2 L120.3,117.6 L120.1,118.0 L119.8,118.3 L119.5,118.6 L119.2,118.9 L118.9,119.2 L118.6,119.4 L118.2,119.6 L117.8,119.8 L117.4,119.9 L117.0,120.0 L116.6,120.0 L116.2,120.1 L115.8,120.1 L115.4,120.0 L115.0,119.9 L114.6,119.8 L114.3,119.7 L113.9,119.6 L113.5,119.4 L113.2,119.2 L112.9,118.9 L112.6,118.7 L112.3,118.4 L112.0,118.1 L111.8,117.8 L111.6,117.5 L111.4,117.2 L111.2,116.9 L111.1,116.5 L111.0,116.2 L110.9,115.8 L110.8,115.5 L110.8,115.2 L110.8,114.8 L110.8,114.5 L110.9,114.2 L111.0,113.9 L111.1,113.6 L111.2,113.3 L111.3,113.0 L111.5,112.8 L111.7,112.5 L111.9,112.3 L112.1,112.1 L112.4,112.0 L112.6,111.8 L112.9,111.7 L113.1,111.6 L113.4,111.5 L113.7,111.5 L114.0,111.4 L114.3,111.4" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="211.0" cy="115.0" r="4" fill="#2a78d6" stroke="#fff" stroke-width="2"/>
+          <text x="220" y="109.0" text-anchor="end" font-size="14" fill="#4a4f57" font-style="italic">x</text>
+          <text x="122.0" y="16" font-size="14" fill="#4a4f57" font-style="italic">v</text>
+          <text x="8" y="222" font-size="12" fill="#7a808a">破線：E = 一定</text>
+          </svg>
+        </figure>
+        <ul class="small">
+          <li>$E$ は軌道に沿って単調に減る（安定）</li>
+          <li>$\gamma = 0$ なら $\dot E = 0$：<strong>エネルギー保存</strong></li>
+          <li>解の存在は<strong>仮定</strong>している（<code>hx</code>，<code>hv</code>）．何を仮定し，何を示したかが主張に現れる</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">/-- 減衰振動子 ẍ = -ω² x - γ ẋ（γ ≥ 0）のエネルギー
+    E = v²/2 + ω² x²/2 は，時間について単調非増加である． -/
+theorem energy_antitone (ω γ : ℝ) (hγ : 0 ≤ γ) (x v : ℝ → ℝ)
+    (hx : ∀ t, HasDerivAt x (v t) t)
+    (hv : ∀ t, HasDerivAt v (-ω ^ 2 * x t - γ * v t) t) :
+    Antitone (fun t =&gt; (v t) ^ 2 / 2 + ω ^ 2 * (x t) ^ 2 / 2) := by
+  -- dE/dt = -γ v² を示す
+  have hE : ∀ t, HasDerivAt (fun t =&gt; (v t) ^ 2 / 2 + ω ^ 2 * (x t) ^ 2 / 2)
+      (-γ * (v t) ^ 2) t := by
+    intro t
+    have h1 := ((hv t).pow 2).div_const 2
+    have h2 := (((hx t).pow 2).const_mul (ω ^ 2)).div_const 2
+    convert h1.add h2 using 1
+    ring
+  -- 導関数が非正なら，単調非増加
+  apply antitone_of_deriv_nonpos (fun t =&gt; (hE t).differentiableAt)
+  intro t
+  rw [(hE t).deriv]
+  nlinarith [sq_nonneg (v t)]</code></pre>
+      <ul class="small">
+        <li>微分の計算は，合成関数・和・定数倍の補題（<code>.pow</code>，<code>.add</code>，<code>.const_mul</code>）を組み合わせる</li>
+        <li>残った式の整理は <code>ring</code>，不等式 $-\gamma v^2 \le 0$ は <code>nlinarith</code> が片付ける</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>制御理論の例 (2)：Mathlib にある道具，まだない道具</h2>
+  <div class="cols c32">
+    <div>
+      <h3 class="rule">すでにあるもの</h3>
+      <table class="full compact">
+        <thead><tr><th>制御理論での用途</th><th>Mathlib の定理・定義</th></tr></thead>
+        <tbody>
+          <tr><td>$\dot x = Ax$ の解 $e^{tA}x_0$</td><td><code>hasDerivAt_exp_smul_const'</code></td></tr>
+          <tr><td>可制御性行列が $A^{n-1}$ までで足りる理由</td><td><code>Matrix.aeval_self_charpoly</code><span class="muted">（Cayley–Hamilton）</span></td></tr>
+          <tr><td>LMI の Schur 補行列</td><td><code>Matrix.PosDef.fromBlocks₁₁</code></td></tr>
+          <tr><td>解の評価，初期値への連続依存</td><td><code>norm_le_gronwallBound_of_norm_deriv_right_le</code><span class="muted">（Grönwall）</span></td></tr>
+          <tr><td>解の存在と一意性</td><td><code>IsPicardLindelof</code>，<code>ODE_solution_unique</code></td></tr>
+          <tr><td>正定値行列</td><td><code>Matrix.PosDef</code>，<code>Matrix.PosSemidef</code></td></tr>
+        </tbody>
+      </table>
+<pre class="s"><code class="language-lean">#check @hasDerivAt_exp_smul_const'      -- d/dt exp(tA) = A exp(tA)
+-- HasDerivAt (fun u =&gt; exp (u • x)) (x * exp (t • x)) t
+
+#check @Matrix.PosDef.fromBlocks₁₁      -- Schur 補行列
+-- A.PosDef →
+--   ((fromBlocks A B Bᴴ D).PosSemidef ↔ (D - Bᴴ * A⁻¹ * B).PosSemidef)</code></pre>
+    </div>
+    <div>
+      <h3 class="rule">まだ見当たらないもの</h3>
+      <ul class="small">
+        <li>Lyapunov 安定性の定義と Lyapunov の定理</li>
+        <li>可制御性・可観測性（Kalman の階数条件）</li>
+        <li>Laplace 変換，伝達関数</li>
+        <li>Riccati 方程式，LQR</li>
+      </ul>
+      <p class="note">Mathlib v4.36.0（2026 年 11 月）のソースをキーワード検索した範囲での話．Mathlib の外のライブラリは調べていない．</p>
+      <div class="box key info small">
+        <strong>部品は揃っているが，制御理論そのものはほぼ白紙．</strong>
+        線形代数，行列解析，常微分方程式の基礎は Mathlib にある．
+        教科書の定理を形式化する余地が大きい分野といえる．
+      </div>
+      <div class="box plain small">
+        始め方の一案：教科書の 1 章（例：線形系の可制御性）を AI エージェントに渡し，
+        定義は人間が読んで確かめ，証明は任せる．
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     7. 実際の形式化事例
+     ====================================================================== -->
+
+<section class="slide divider">
+  <div class="num">7</div>
+  <h2>実際の形式化事例</h2>
+  <p>Mathlib と AI による開発 ／ Lean Rademacher ／ Lean Ridgelet ／ Fermat の最終定理 ／ Navier–Stokes と Euler ／ Physlib ／ Riemann 予想の検証</p>
+</section>
+
+<section class="slide">
+  <h2>Mathlib の現在</h2>
+  <div class="cols">
+    <div>
+      <div class="kpi">
+        <div><div class="v">142,131</div><div class="k">定義</div></div>
+        <div><div class="v">296,355</div><div class="k">定理</div></div>
+        <div><div class="v">772</div><div class="k">貢献者</div></div>
+      </div>
+      <h3 class="small">ソースコードの行数の推移</h3>
+      <div class="viz">
+        <svg viewBox="0 0 560 300" role="img" aria-label="Mathlib の行数の推移">
+        <g class="grid">
+        <line x1="52" x2="442" y1="272.0" y2="272.0"/>
+        <line x1="52" x2="442" y1="222.4" y2="222.4"/>
+        <line x1="52" x2="442" y1="172.8" y2="172.8"/>
+        <line x1="52" x2="442" y1="123.2" y2="123.2"/>
+        <line x1="52" x2="442" y1="73.5" y2="73.5"/>
+        <line x1="52" x2="442" y1="23.9" y2="23.9"/>
+        </g><g class="axis">
+        <text x="44" y="276.5" text-anchor="end">0</text>
+        <text x="44" y="226.9" text-anchor="end">50 万</text>
+        <text x="44" y="177.3" text-anchor="end">100 万</text>
+        <text x="44" y="127.7" text-anchor="end">150 万</text>
+        <text x="44" y="78.0" text-anchor="end">200 万</text>
+        <text x="44" y="28.4" text-anchor="end">250 万</text>
+        <text x="76.4" y="292" text-anchor="middle">2018</text>
+        <text x="157.6" y="292" text-anchor="middle">2020</text>
+        <text x="238.9" y="292" text-anchor="middle">2022</text>
+        <text x="320.1" y="292" text-anchor="middle">2024</text>
+        <text x="401.4" y="292" text-anchor="middle">2026</text>
+        </g>
+        <path d="M76.4,267.3 L96.7,265.1 L117.0,260.5 L137.3,255.8 L157.6,250.8 L177.9,242.2 L198.2,226.8 L218.6,213.4 L238.9,198.1 L259.2,181.6 L279.5,167.2 L299.8,160.5 L313.2,159.9" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="76.4" cy="267.3" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2018 年 1 月：4.7 万行"/>
+        <circle cx="96.7" cy="265.1" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2018 年 7 月：7.0 万行"/>
+        <circle cx="117.0" cy="260.5" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2019 年 1 月：12 万行"/>
+        <circle cx="137.3" cy="255.8" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2019 年 7 月：16 万行"/>
+        <circle cx="157.6" cy="250.8" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2020 年 1 月：21 万行"/>
+        <circle cx="177.9" cy="242.2" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2020 年 7 月：30 万行"/>
+        <circle cx="198.2" cy="226.8" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2021 年 1 月：46 万行"/>
+        <circle cx="218.6" cy="213.4" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2021 年 7 月：59 万行"/>
+        <circle cx="238.9" cy="198.1" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2022 年 1 月：74 万行"/>
+        <circle cx="259.2" cy="181.6" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2022 年 7 月：91 万行"/>
+        <circle cx="279.5" cy="167.2" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2023 年 1 月：106 万行"/>
+        <circle cx="299.8" cy="160.5" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2023 年 7 月：112 万行"/>
+        <circle cx="313.2" cy="159.9" r="4" fill="var(--series-2)" stroke="#fff" stroke-width="2" data-tip="mathlib（Lean 3）　2023 年 10 月：113 万行"/>
+        <path d="M218.6,271.7 L238.9,270.4 L259.2,269.7 L279.5,255.4 L299.8,146.4 L320.1,130.9 L340.4,115.5 L360.7,105.4 L381.1,85.0 L401.4,60.9 L421.7,35.5 L437.5,23.0" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="218.6" cy="271.7" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2021 年 7 月：0.3 万行"/>
+        <circle cx="238.9" cy="270.4" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2022 年 1 月：1.6 万行"/>
+        <circle cx="259.2" cy="269.7" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2022 年 7 月：2.3 万行"/>
+        <circle cx="279.5" cy="255.4" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2023 年 1 月：17 万行"/>
+        <circle cx="299.8" cy="146.4" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2023 年 7 月：127 万行"/>
+        <circle cx="320.1" cy="130.9" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2024 年 1 月：142 万行"/>
+        <circle cx="340.4" cy="115.5" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2024 年 7 月：158 万行"/>
+        <circle cx="360.7" cy="105.4" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2025 年 1 月：168 万行"/>
+        <circle cx="381.1" cy="85.0" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2025 年 7 月：188 万行"/>
+        <circle cx="401.4" cy="60.9" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2026 年 1 月：213 万行"/>
+        <circle cx="421.7" cy="35.5" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2026 年 7 月：238 万行"/>
+        <circle cx="437.5" cy="23.0" r="4" fill="var(--series-1)" stroke="#fff" stroke-width="2" data-tip="Mathlib（Lean 4）　2026 年 11 月：251 万行"/>
+        <text class="lbl" x="210.4" y="164.8" text-anchor="end">mathlib（Lean 3）</text>
+        <text class="lbl" x="210.4" y="181.8" text-anchor="end" fill-opacity=".7">113 万行で開発終了</text>
+        <text class="lbl" x="447.5" y="24.0" font-weight="700">Mathlib（Lean 4）</text>
+        <text class="lbl" x="447.5" y="41.0">251 万行</text>
+        <text class="lbl" x="301.8" y="217.4" fill-opacity=".7">2023 年：Lean 4 へ移植</text>
+        </svg>
+        <div class="legend"><span><i style="background: var(--series-2)"></i>mathlib（Lean 3）</span><span><i style="background: var(--series-1)"></i>Mathlib（Lean 4）</span></div>
+        <div class="tip"></div>
+      </div>
+      <p class="note">2026 年 11 月 22 日時点．9,522 ファイル，約 251 万行．出典：<a href="https://mathlib.org/mathlib_stats.html">mathlib.org/mathlib_stats.html</a></p>
+    </div>
+    <div>
+      <ul class="small">
+        <li>1 つのリポジトリ，1 つの <code>import Mathlib</code>，一貫した型クラスの階層</li>
+        <li><strong>すべての変更を，人間のメンテナが査読する</strong>．CI と命名・書式のリンタ</li>
+        <li>そのため成長は<strong>概ね線形</strong>（Lean 4 への移植後は，年に 30〜45 万行）．
+          AI で書ける量が増えても，査読の速さは急には変わらない<span class="muted">（AI による開発は次ページ）</span></li>
+      </ul>
+      <h3 class="rule">何があるか（抜粋）</h3>
+      <ul class="small">
+        <li><strong>代数</strong>：群，環，体，加群，多項式，Galois 理論</li>
+        <li><strong>解析</strong>：ノルム空間，Fréchet 微分，Bochner 積分，Fourier 変換，Schwartz 空間，$L^p$ 空間</li>
+        <li><strong>確率</strong>：独立性，条件付き期待値，マルチンゲール，集中不等式</li>
+        <li>位相，幾何，圏論，数論，組合せ論，論理</li>
+      </ul>
+      <h3 class="rule">まだ薄いところ</h3>
+      <p class="small">偏微分方程式，調和解析の多く，統計的学習理論，制御理論，物理 → これらは Mathlib の外のプロジェクトで進んでいる（以下の事例）</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>AI による開発は，Mathlib の外で進んでいる</h2>
+  <p class="small">Mathlib は人間が査読する．AI が書いた大量の形式化を受け止めるために，査読の仕方を変えた別のプロジェクトが動いている．</p>
+  <div class="cards3">
+    <div class="card">
+      <div class="hd">Tau Ceti</div>
+      <div class="sub">AI が書き，AI が査読する数学ライブラリ</div>
+      <ul>
+        <li>Lean FRO と Mathlib Initiative が育成中<span class="muted">（リポジトリの作成は 2026 年 6 月）</span></li>
+        <li>人間が書くのは<strong>ロードマップ</strong>（何を形式化するか）と，査読の基準</li>
+        <li>実装は AI．別の AI が<strong>敵対的に査読</strong>する：定義と主張がロードマップの意図どおりか，再利用できるか</li>
+        <li>Mathlib の下流．同じ内容が Mathlib に入れば，そちらに乗り換える</li>
+        <li>目標：研究の前線に届くための「基礎的な数学すべて」</li>
+      </ul>
+      <div class="src"><a href="https://github.com/TauCetiProject/TauCeti">github.com/TauCetiProject/TauCeti</a><br><a href="https://lean-lang.org/use-cases/tau-ceti">lean-lang.org/use-cases/tau-ceti</a></div>
+    </div>
+    <div class="card">
+      <div class="hd">Lean Pool</div>
+      <div class="sub">形式化プロジェクトのアーカイブ</div>
+      <ul>
+        <li>完成した形式化を，人間が書いたか AI が書いたかを問わず収録する<span class="muted">（arXiv や AFP に近い位置づけ）</span></li>
+        <li>人手の査読の代わりに，リンタと LLM の判定で品質を保つ．<code>sorry</code> なし，公理は標準の 3 つ，最新の Mathlib に追従</li>
+        <li>保守も AI エージェントが行う</li>
+        <li><strong>394 プロジェクト，約 1,480 万行</strong><span class="muted">（2026-11-23．Mathlib は約 251 万行）</span></li>
+      </ul>
+      <div class="src"><a href="https://github.com/LeanPool/lean-pool">github.com/LeanPool/lean-pool</a><br>V. Ilin, arXiv:2609.25199</div>
+    </div>
+    <div class="card">
+      <div class="hd">Prove2Me</div>
+      <div class="sub">形式化の共同作業プラットフォーム</div>
+      <ul>
+        <li>利用者が<strong>ミッション</strong>（形式化したい定理）を立て，各自の AI エージェントが証明を持ち寄る</li>
+        <li><strong>主張と証明を別のものとして扱う</strong>．1 つの主張に，複数の証明が付いてよい</li>
+        <li>人間が監査する範囲（目標の主張，定義，節目の補題）を先に固定し，残りはエージェントが埋める</li>
+        <li>他のエージェントが示した結果を再利用できる</li>
+      </ul>
+      <div class="src"><a href="https://prove2.me">prove2.me</a><br>Chen, Lu, Marwaha, Peng, Yuen, arXiv:2608.28433</div>
+    </div>
+  </div>
+  <div class="box key info small">
+    <strong>共通する設計：書くのは AI，検査するのはカーネル，人間が見るのは主張（ロードマップ，目標，定義）．</strong>
+    査読の律速を，人間から機械へ移す試みといえる．Tau Ceti も Lean Pool も Mathlib の下流にあり，人間が査読した Mathlib が土台になっている．
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean Rademacher：定義</h2>
+  <div class="cols c23">
+    <div>
+      <p class="small">関数族 $F \subset \{f : \mathcal{X} \to \mathbb{R}\}$ と標本 $S = (x_k)_{k=1}^n$ に対して</p>
+      <p class="small"><strong>経験 Rademacher 複雑度</strong></p>
+      $$ \hat{\mathfrak{R}}_n(F; S) = \mathbb{E}_\sigma\Big[\sup_{f \in F}\Big|\frac1n \sum_{k=1}^n \sigma_k f(x_k)\Big|\Big] $$
+      <p class="small"><strong>Rademacher 複雑度</strong>　$\mathfrak{R}_n(F) = \mathbb{E}_S\big[\hat{\mathfrak{R}}_n(F; S)\big]$</p>
+      <p class="small"><strong>一様偏差</strong>（経験誤差と期待誤差の差の上限）</p>
+      $$ \Delta_n(S) = \sup_{f \in F}\big|\hat{L}_S(f) - L(f)\big| $$
+      <p class="note"><a href="https://github.com/auto-res/lean-rademacher">github.com/auto-res/lean-rademacher</a>　<a href="https://arxiv.org/abs/2503.19605">arXiv:2503.19605</a><br>
+        塚本，笠浦，恩田，水野，園田（ITP 2026）．統計的学習理論の形式化</p>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">def Signs (n : ℕ) : Type := Fin n → ({-1, 1} : Finset ℤ)
+
+def empiricalRademacherComplexity
+    (n : ℕ) (f : ι → 𝒳 → ℝ) (S : Fin n → 𝒳) : ℝ :=
+  (Fintype.card (Signs n) : ℝ)⁻¹ *
+    ∑ σ : Signs n, ⨆ i, |(n : ℝ)⁻¹ * ∑ k : Fin n, (σ k : ℝ) * f i (S k)|
+
+def rademacherComplexity
+    (n : ℕ) (f : ι → 𝒳 → ℝ) (μ : Measure Ω) (X : Ω → 𝒳) : ℝ :=
+  μⁿ[fun ω : Fin n → Ω ↦ empiricalRademacherComplexity n f (X ∘ ω)]
+
+def uniformDeviation
+    (n : ℕ) (f : ι → 𝒳 → ℝ) (μ : Measure Ω) (X : Ω → 𝒳)
+    (S : Fin n → 𝒳) : ℝ :=
+  ⨆ i, |(n : ℝ)⁻¹ * ∑ k : Fin n, f i (S k) - μ[fun ω' ↦ f i (X ω')]|</code></pre>
+      <ul class="small">
+        <li>関数族は添字の型 <code>ι</code> で表す．<code>μⁿ</code> は <code>Fin n → Ω</code> 上の直積測度</li>
+        <li>符号 $\sigma$ についての期待値は，$2^n$ 通りの有限和として書かれている</li>
+        <li>上限 <code>⨆</code> は，上に有界でなければジャンク値 <code>0</code> になる → 定理には有界性の仮定が付く</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean Rademacher：汎化誤差の上界</h2>
+  <div class="cols c23">
+    <div>
+      <div class="box plain small">
+        <strong>定理．</strong>すべての $f \in F$ と $z$ について $|f(z)| \le b$ とし，$F$ は可分で $f \mapsto f(x)$ が連続とする．このとき
+        $$ \Pr\big\{\Delta_n(S) \ge 2\,\mathfrak{R}_n(F) + \varepsilon\big\} \le \exp\!\Big(-\frac{n\varepsilon^2}{2b^2}\Big). $$
+      </div>
+      <p class="small"><strong>証明の道筋</strong>：対称化 → McDiarmid の不等式（有界差分）→ 稠密な列を使って，可算族から可分族へ持ち上げる</p>
+      <div class="box key info small">
+        <strong>形式化で明確になったこと</strong>：<br>
+        上限 $\sup_{f \in F}$ の<strong>可測性</strong>には，可分性・連続性・第 1 可算性が要る．
+        教科書では暗黙のうちに仮定されている．
+      </div>
+      <p class="note">ライブラリには他に，McDiarmid の不等式，Massart の補題，Dudley のエントロピー積分（被覆数とチェイニング），$\ell_1$ 制約（lasso）の上界がある．</p>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">theorem uniform_deviation_tail_bound_separable_of_pos
+    [MeasurableSpace 𝒳] [Nonempty 𝒳] [Nonempty ι]
+    [TopologicalSpace ι] [SeparableSpace ι] [FirstCountableTopology ι]
+    [IsProbabilityMeasure μ]
+    (f : ι → 𝒳 → ℝ) (hf : ∀ i, Measurable (f i))
+    (X : Ω → 𝒳) (hX : Measurable X)
+    {b : ℝ} (hb : 0 &lt; b) (hf' : ∀ i x, |f i x| ≤ b)
+    (hf'' : ∀ x : 𝒳, Continuous fun i ↦ f i x)
+    {ε : ℝ} (hε : 0 ≤ ε) :
+    (μⁿ (fun ω ↦ 2 • rademacherComplexity n f μ X + ε ≤
+        uniformDeviation n f μ X (X ∘ ω))).toReal ≤
+      (- ε ^ 2 * n / (2 * b ^ 2)).exp</code></pre>
+      <table class="full compact">
+        <thead><tr><th>紙の上の仮定</th><th>Lean の仮定</th></tr></thead>
+        <tbody>
+          <tr><td>$|f(z)| \le b$</td><td><code>hf' : ∀ i x, |f i x| ≤ b</code></td></tr>
+          <tr><td>$F$ は可分</td><td><code>[SeparableSpace ι] [FirstCountableTopology ι]</code></td></tr>
+          <tr><td>$f \mapsto f(x)$ は連続</td><td><code>hf'' : ∀ x, Continuous fun i ↦ f i x</code></td></tr>
+          <tr><td>「適当な可測性のもとで」</td><td><code>hf</code>，<code>hX</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean Rademacher：具体例（線形予測器）</h2>
+  <div class="cols c23">
+    <div>
+      <p class="small">重みが有界な線形予測器を，有界な入力の上で考える：</p>
+      $$ F = \{x \mapsto \langle w, x\rangle : \|w\| \le W\}, \qquad \|x_k\| \le X $$
+      <div class="box plain small">
+        <strong>定理．</strong>
+        $$ \hat{\mathfrak{R}}_n(F; S) \le \frac{XW}{\sqrt{n}} $$
+      </div>
+      <p class="small">これを前ページの上界に代入すれば，$L^2$ 正則化した線形モデル（リッジ回帰）について，おなじみの
+        $O(1/\sqrt{n})$ の汎化誤差保証が得られる．</p>
+      <ul class="small">
+        <li>入力と重みは <code>EuclideanSpace ℝ (Fin d)</code> の閉球の元</li>
+        <li>証明：Cauchy–Schwarz と Jensen の不等式</li>
+        <li>同じファイルに，$\ell_1/\ell_\infty$（lasso）版もある（$\sqrt{2\log(2d)}$ の因子が付く）</li>
+      </ul>
+    </div>
+    <div>
+<pre class="s"><code class="language-lean">local notation "⟪" x ", " y "⟫" =&gt; @inner ℝ _ _ x y
+
+/-- 例：L2 ノルムが有界な線形予測器の，
+    経験 Rademacher 複雑度の上界． -/
+theorem linear_predictor_l2_bound
+    [Nonempty ι] (d : ℕ) (W X : ℝ) (hx : 0 ≤ X) (hw : 0 ≤ W)
+    (Y' : Fin n → Metric.closedBall (0 : EuclideanSpace ℝ (Fin d)) X)
+    (w' : ι → Metric.closedBall (0 : EuclideanSpace ℝ (Fin d)) W) :
+    empiricalRademacherComplexity
+      n (fun (i : ι) a ↦ ⟪((Subtype.val ∘ w') i), a⟫) (Subtype.val ∘ Y') ≤
+    X * W / √(n : ℝ)</code></pre>
+      <div class="box plain small">
+        <code>Metric.closedBall 0 X</code> を<strong>型として</strong>使っている（部分型）．
+        「$\|x_k\| \le X$」という仮定が，データの型に組み込まれている．$\Sigma$ 型（部分型）の実例．
+      </div>
+      <p class="note">docstring は原文（英語）を訳したもの．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean Ridgelet：積分表現とリッジレット変換</h2>
+  <div class="cols c23">
+    <div>
+      <p class="small"><strong>積分表現</strong>：活性化関数 $\eta$，係数 $T(a, b)$ のニューラルネット（双対リッジレット変換）</p>
+      $$ R^\dagger_\eta T(x) = \int_{\mathbb{R}^m \times \mathbb{R}} T(a, b)\,\eta(a \cdot x - b)\,\|a\|^{-s}\,da\,db $$
+      <p class="small"><strong>リッジレット変換</strong>：関数 $f$ を $\psi$ で解析する</p>
+      $$ R_\psi f(a, b) = \int_{\mathbb{R}^m} f(x)\,\overline{\psi(a \cdot x - b)}\,\|a\|^{s}\,dx $$
+      <p class="small"><strong>許容定数</strong></p>
+      $$ K_{\psi,\eta} = (2\pi)^{m-1} \int_{\mathbb{R} \setminus \{0\}} \frac{\overline{\hat\psi(\zeta)}\,\hat\eta(\zeta)}{|\zeta|^m}\,d\zeta $$
+      <p class="small">$K_{\psi,\eta}$ が有限で $0$ でないとき，$(\psi, \eta)$ は<strong>許容的</strong>という．
+        ReLU，階段関数，tanh も $\eta$ として許される（原点から離れた $\hat\eta$ だけが効く）．</p>
+      <p class="note">$L^1$ 理論：園田–村田 <a href="https://arxiv.org/abs/1505.03654">arXiv:1505.03654</a>　／　<a href="https://shosonoda.github.io/lean-ridgelet/blueprint/html-multi/">blueprint</a>　／　<a href="https://github.com/shosonoda/lean-ridgelet">github.com/shosonoda/lean-ridgelet</a></p>
+    </div>
+    <div>
+<pre class="xxs"><code class="language-lean">/-- パラメータ (a, b) の空間 ℝ^m × ℝ． -/
+abbrev RidgeletParameterSpace (m : ℕ) := InputSpace m × ℝ
+
+/-- R_ψ f (a, b) = ∫ x, f x * conj (ψ (⟪a, x⟫ - b)) * ‖a‖^s -/
+def euclideanRidgeletTransform (m : ℕ) (s : ℝ) (ψ : ℝ → ℂ) (f : InputSpace m → ℂ) :
+    RidgeletParameterSpace m → ℂ :=
+  fun p =&gt; ∫ x, f x * conj (ψ (inner ℝ p.1 x - p.2)) * ((‖p.1‖ ^ s : ℝ) : ℂ)
+
+/-- R†_η T (x) = ∫ (a, b), T (a, b) * η (⟪a, x⟫ - b) * ‖a‖^{-s} -/
+def euclideanDualRidgeletTransform (m : ℕ) (s : ℝ) (η : ℝ → ℂ)
+    (T : RidgeletParameterSpace m → ℂ) (x : InputSpace m) : ℂ :=
+  ∫ p : RidgeletParameterSpace m, T p * η (inner ℝ p.1 x - p.2) * ((‖p.1‖ ^ s : ℝ) : ℂ)⁻¹
+
+/-- K_{ψ,η} = (2π)^{m-1} ∫_{ℝ \ {0}} conj (ψ̂ ζ) * Fη ζ / |ζ|^m dζ．
+    Fη は，原点から離れたところでの η の Fourier 変換． -/
+def admissibilityConstant (m : ℕ) (ψ Fη : ℝ → ℂ) : ℂ :=
+  (2 * Real.pi) ^ (m - 1) *
+    ∫ ζ in {(0 : ℝ)}ᶜ, conj (angularFourier1D ψ ζ) * Fη ζ / ((|ζ| ^ m : ℝ) : ℂ)
+
+def IsAdmissiblePair (m : ℕ) (ψ η Fη : ℝ → ℂ) : Prop :=
+  Integrable ψ volume ∧ HasFourierAwayFromOrigin η Fη ∧
+  IntegrableOn (fun ζ =&gt; conj (angularFourier1D ψ ζ) * Fη ζ / ((|ζ| ^ m : ℝ) : ℂ))
+    {(0 : ℝ)}ᶜ volume ∧
+  admissibilityConstant m ψ Fη ≠ 0</code></pre>
+      <ul class="small">
+        <li>数式とコードが，ほぼ 1 対 1 に対応する</li>
+        <li>ReLU の Fourier 変換は関数としては存在しない．<code>HasFourierAwayFromOrigin η Fη</code> は「原点から離れた台をもつ試験関数に対しては <code>Fη</code> が $\hat\eta$ の役をする」という条件で，超関数を使わずに述べている</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Lean Ridgelet：再構成公式の主張と証明</h2>
+  <div class="cols c32">
+    <div>
+      <div class="box plain small">
+        <strong>定理．</strong>許容的な $(\psi, \eta)$ と，$f \in L^1(\mathbb{R}^m)$ で $\hat f \in L^1$ となるものに対して
+        $$ R^\dagger_\eta R_\psi f = K_{\psi,\eta}\, f \quad \text{（ほとんど至るところ，および } f \text{ の連続点で）} $$
+        ただし $R^\dagger_\eta$ は $\varepsilon \le \|a\| \le \delta$ 上の積分の $\varepsilon \to 0$，$\delta \to \infty$ の極限とする．
+      </div>
+<pre class="xxs"><code class="language-lean">theorem l1_reconstruction_formula (m k : ℕ) [NeZero m]
+    {ψ η Fη : ℝ → ℂ} {f : InputSpace m → ℂ} {Cη : ℝ}
+    (hadm : IsAdmissiblePair m ψ η Fη)
+    (hηk : ∀ z, ‖η z‖ ≤ Cη * (1 + |z|) ^ k)                        -- η は |z|^k 程度の増大
+    (hψk : Integrable (fun s : ℝ =&gt; (1 + |s|) ^ k * ‖ψ s‖) volume)  -- ψ の k 次モーメント
+    (hψvm : ∀ j ≤ k, (∫ s : ℝ, (s : ℂ) ^ j * ψ s) = 0)              -- ψ の k 次までの消失モーメント
+    (hf : Integrable f volume)
+    (hfk : Integrable (fun y : InputSpace m =&gt; (1 + ‖y‖) ^ k * ‖f y‖) volume)
+    (hfhat : Integrable (Fourier.angularFourierIntegralInner f) volume) :
+    (∀ᵐ x ∂(volume : Measure (InputSpace m)),
+      Filter.Tendsto
+        (fun q : ℝ × ℝ =&gt; truncatedDualRidgeletTransform m 1 η
+            (euclideanRidgeletTransform m 1 ψ f) q.1 q.2 x)
+        ridgeletTruncationFilter (𝓝 (admissibilityConstant m ψ Fη * f x))) ∧
+    ∀ x, ContinuousAt f x → Filter.Tendsto (fun q : ℝ × ℝ =&gt; …) ridgeletTruncationFilter
+        (𝓝 (admissibilityConstant m ψ Fη * f x))</code></pre>
+      <p class="note"><strong>系（ReLU ネットの万能近似）</strong>：そのような任意の $f$ に対し，可積分な $\psi$ と $K \ne 0$ があって $R^\dagger_{\mathrm{ReLU}} R_\psi f = K f$（a.e.）．<br>
+        <strong>無限次元への拡張</strong>：<a href="https://github.com/shosonoda/lean-operator-ridgelet">shosonoda/lean-operator-ridgelet</a>．原稿の 62 項目を形式化し，341 個の主張を Comparator で検査している．</p>
+    </div>
+    <div>
+      <h3 class="rule">証明（<code>sorry</code> なし）</h3>
+      <ol class="small">
+        <li><strong>Fourier 切断定理</strong>：$b$ について，$R_\psi f(a, \cdot)$ の Fourier 変換は $\overline{\hat\psi(\zeta)}\,\hat f(\zeta a)$</li>
+        <li>$b$ についての Plancherel と，$a$ についての極座標変換で，切り詰めた $R^\dagger_\eta R_\psi f(x)$ を円環上の積分に直す</li>
+        <li>$\varepsilon \to 0$，$\delta \to \infty$ で<strong>優収束定理</strong><span class="muted">（ここでモーメントの仮定を使う）</span></li>
+        <li><strong>Fourier 逆変換</strong>（a.e.，または連続点で）</li>
+      </ol>
+      <div class="box key info small">
+        <strong>形式化で分かったこと</strong>
+        <ol class="mb0">
+          <li><strong>暗黙の仮定の明確化</strong>：元の論文は $\psi$ を Schwartz 関数，$\eta$ を超関数としていた．
+            関数の水準では，$\eta$ の増大度 $k$ と，$\psi$ の $k$ 次までの<strong>消失モーメント条件</strong>が必要になる</li>
+          <li><strong>新しい定理の発見</strong>：形式化を進める中で，入力空間を<strong>無限次元</strong>の Hilbert 空間へ拡張した定理が得られた（作用素リッジレット変換）</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Fermat の最終定理（Anthropic，2026）</h2>
+  <div class="cols">
+    <div>
+<pre class="s"><code class="language-lean">theorem fermat_last_theorem (n : ℕ) (hn : 3 ≤ n) (a b c : ℕ)
+    (ha : 0 &lt; a) (hb : 0 &lt; b) (hc : 0 &lt; c) :
+    a ^ n + b ^ n ≠ c ^ n</code></pre>
+<pre class="s" data-file="FinalCheck.lean（既定のビルド対象）"><code class="language-lean">/-- info: 'fermat_last_theorem' depends on axioms:
+    [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms fermat_last_theorem</code></pre>
+      <ul class="small">
+        <li>証明の道筋は Frey，Serre，Ribet，Wiles，Taylor–Wiles のもの：Frey 曲線，既約性（Mazur），保型性持ち上げ，レベル下げ</li>
+        <li>Lean 4.33.1，Mathlib v4.33.0．<strong>60,475 モジュール</strong>，29,511 定理</li>
+        <li>AI エージェントが書いた．土台は人間が書いたオープンソース（Imperial College の FLT プロジェクト，flt-regular，Mathlib）</li>
+      </ul>
+      <p class="note"><a href="https://github.com/anthropics/fermats-last-theorem">github.com/anthropics/fermats-last-theorem</a>　参考：手元の Mac Studio（M1 Ultra，20 コア）では，<code>lake build</code> に約 3 日かかった．</p>
+    </div>
+    <div>
+      <h3 class="rule">3 通りの独立な検査（README より）</h3>
+      <table class="full">
+        <thead><tr><th style="width: 40%;">検査</th><th>結果</th></tr></thead>
+        <tbody>
+          <tr><td>ゼロからの <code>lake build</code><br><span class="muted">Mathlib もソースから</span></td><td>96 並列で 5 時間 32 分，最大メモリ 153 GB</td></tr>
+          <tr><td><strong>Comparator</strong> v4.33.0</td><td><code>Your solution is okay!</code><br>14 時間 46 分（カーネル再検査は 1 コア），最大 230 GB</td></tr>
+          <tr><td><strong>nanoda</strong> 0.4.13<br><span class="muted">Rust による別実装のカーネル</span></td><td><code>Checked 1052234 declarations with no errors</code></td></tr>
+        </tbody>
+      </table>
+      <div class="box plain small">
+        どのモジュールにも <code>axiom</code>，<code>sorry</code>，<code>native_decide</code>，<code>unsafe</code>，<code>implemented_by</code> はない．<br>
+        README：「（宣言の名前は機械が付けたものなので）名前と主張が食い違うときは，証明されたのは主張のほうである」
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>FLT：Comparator はどう使われているか</h2>
+  <div class="cols">
+    <div>
+<pre class="s" data-file="verification/comparator/Challenge.lean — Mathlib だけを import" data-trust="trusted"><code class="language-lean">import Mathlib
+
+theorem FLT_for_comparator (n : ℕ) (hn : 3 ≤ n) (a b c : ℕ)
+    (ha : 0 &lt; a) (hb : 0 &lt; b) (hc : 0 &lt; c) :
+    a ^ n + b ^ n ≠ c ^ n :=
+  sorry
+
+/-- Mathlib's own named proposition. -/
+theorem FLT_mathlib_for_comparator : FermatLastTheorem :=
+  sorry</code></pre>
+<pre class="s" data-file="verification/comparator/Solution.lean" data-trust="untrusted"><code class="language-lean">import Mathlib
+import Theorems.Thm_fermat_last_theorem
+
+theorem FLT_for_comparator (n : ℕ) (hn : 3 ≤ n) (a b c : ℕ)
+    (ha : 0 &lt; a) (hb : 0 &lt; b) (hc : 0 &lt; c) :
+    a ^ n + b ^ n ≠ c ^ n :=
+  fermat_last_theorem n hn a b c ha hb hc</code></pre>
+    </div>
+    <div>
+<pre class="s"><code class="language-json">{ "challenge_module": "Challenge",
+  "solution_module": "Solution",
+  "theorem_names": ["FLT_for_comparator",
+                    "FLT_mathlib_for_comparator"],
+  "permitted_axioms": ["propext", "Quot.sound",
+                       "Classical.choice"],
+  "enable_nanoda": false }</code></pre>
+      <ul class="small">
+        <li>Challenge の語彙は<strong>素の Mathlib だけ</strong>：<code>ℕ</code>，<code>+</code>，<code>^</code>，<code>≤</code>，<code>≠</code>．
+          Comparator は，主張に現れる定数がすべて Mathlib のものと同一であることを確かめる．
+          6 万個のモジュールのどれも，これらを定義し直せない</li>
+        <li>カーネルの再検査は，主張の下にあるものすべて（Mathlib を含む）をやり直す</li>
+        <li>nanoda は別途，エクスポート（37.8 GB）に対して実行している</li>
+      </ul>
+      <div class="box key info small">
+        <strong>人間が読むのは左上の 10 行だけ．</strong><br>
+        どの道具も検査しないこと：<em>途中の</em>補題が，その名前の示すとおりの意味かどうか．
+        そのための読み物として <code>PROOF-PATH.md</code> が用意されている．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Navier–Stokes 方程式と Euler 方程式の爆発（OpenAI，2026）</h2>
+  <div class="cols c23">
+    <div>
+      <p class="small">任意の粘性係数 $\nu > 0$ に対して</p>
+      <ul class="small">
+        <li><strong>(C) 全空間 $\mathbb{R}^3$</strong>：滑らかな初期値と外力で，運動エネルギーが一様有界な大域的な滑らかな解が存在しないものがある</li>
+        <li><strong>(D) トーラス $\mathbb{R}^3/\mathbb{Z}^3$</strong>：滑らかな周期的初期値と外力で，大域的な滑らかな解が存在しないものがある</li>
+      </ul>
+      <p class="small">Clay 研究所のミレニアム問題の記述にある，「解の破綻」の側の選択肢 (C)，(D) にあたる．</p>
+      <p class="small"><strong>Euler 方程式</strong>：$\mathbb{R}^3$ 上の，滑らかでコンパクト台をもち発散のない初期速度で，外力なしの解が有限時間で特異性を生じるものがある．</p>
+      <p class="note"><a href="https://github.com/openai/NavierStokesAndEuler">github.com/openai/NavierStokesAndEuler</a><br>Lean 4.34.0-rc2．Navier–Stokes が約 640 モジュール，Euler が約 1,800 モジュール（手元の clone で数えた値）</p>
+    </div>
+    <div>
+<pre class="xs"><code class="language-lean">/-- (C) Breakdown of Navier–Stokes solutions on ℝ³. -/
+theorem navier_stokes_breakdown_R3 (nu : ℝ) (hnu : nu &gt; 0) :
+    ∃ (u₀ : ℝ³ → ℝ³) (f : ℝ³ → ℝ → ℝ³),
+    InitialVelocityConditionDecay u₀ ∧ ForceConditionDecay f ∧
+    ¬ (∃ v p, NavierStokesExistenceAndSmoothnessRn nu u₀ f v p) := by
+  sorry
+
+/-- (D) Breakdown of Navier–Stokes Solutions on ℝ³/ℤ³. -/
+theorem navier_stokes_breakdown_periodic (nu : ℝ) (hnu : nu &gt; 0) :
+    ∃ (u₀ : ℝ³ → ℝ³) (f : ℝ³ → ℝ → ℝ³),
+    InitialVelocityConditionPeriodic u₀ ∧ ForceConditionPeriodic f ∧
+    ¬ (∃ v p, NavierStokesExistenceAndSmoothnessPeriodic nu u₀ f v p) := by
+  sorry</code></pre>
+<pre class="xs"><code class="language-lean">structure NavierStokesExistenceAndSmoothness (nu : ℝ) (u₀ …) (f …) (v …) (p …) :
+    Prop where
+  /-- ∂v/∂t + (v·∇)v = ν Δv − ∇p + f -/
+  navier_stokes : ∀ x, ∀ t ≥ 0,
+    derivWithin (v x ·) (Set.Ici 0) t + fderiv ℝ (v · t) x (v x t) =
+      nu • Δ (v · t) x - gradient (p · t) x + f x t
+  div_free : …    initial_condition : …    velocity_smooth : …    pressure_smooth : …</code></pre>
+      <p class="note">上はチャレンジファイル（証明は <code>sorry</code>）の主張．下は「滑らかな解である」ことの定義の抜粋で，偏微分方程式が Lean の式として書かれている．</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Navier–Stokes：Comparator はどう使われているか</h2>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>チャレンジファイルは<strong>証明した側が書いたものではない</strong>．
+          Google DeepMind の <em>Formal Conjectures</em> にある問題の主張を，Mathlib だけを import する独立したファイルに移したもの</li>
+        <li>「滑らかな解」「減衰」「周期性」，発散，ラプラシアン，エネルギー — 語彙全体が，その第三者の出典に由来する</li>
+        <li>Comparator は Lake の依存パッケージとして入っていて，検査は 1 コマンド</li>
+      </ul>
+<pre class="s"><code class="language-bash">lake exe comparator ComparatorChallenges/NavierStokes.json
+lake exe comparator ComparatorChallenges/Euler.json</code></pre>
+      <div class="box plain small">
+        <code>formalization.yaml</code>（リポジトリのルート）に，主結果ごとに，宣言名，ファイル，<code>sorry</code> の数，公理，Comparator の設定が記録されている．
+      </div>
+    </div>
+    <div>
+<pre class="xs"><code class="language-json">{ "challenge_module": "ComparatorChallenges.NavierStokes",
+  "solution_module": "NavierStokes.ComparatorSolution",
+  "enable_nanoda": true,
+  "theorem_names": [
+    "NavierStokes.Comparator.navier_stokes_breakdown_R3",
+    "NavierStokes.Comparator.navier_stokes_breakdown_periodic" ],
+  "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"] }</code></pre>
+      <ul class="small">
+        <li><code>enable_nanoda: true</code>：Lean のカーネルと nanoda の両方で再検査する</li>
+        <li>FLT と同じ型：<strong>信頼するのは Mathlib ＋ 短いチャレンジファイル ＋ カーネル</strong>．
+          エージェントが書いた約 2,500 モジュールは，読まれるのではなく，再検査される</li>
+      </ul>
+      <table class="full compact">
+        <thead><tr><th></th><th>主張の語彙</th><th>主張を書いた人</th><th>カーネル</th></tr></thead>
+        <tbody>
+          <tr><td>FLT</td><td>Mathlib のみ</td><td>証明した側</td><td>Lean，別途 nanoda</td></tr>
+          <tr><td>Navier–Stokes</td><td>Mathlib のみ</td><td><strong>第三者</strong></td><td>Lean ＋ nanoda</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Physlib：物理学の形式化</h2>
+  <div class="cols c23">
+    <div>
+      <ul class="small">
+        <li>物理の結果（定義，定理，計算）を Lean 4 で「デジタル化」するコミュニティのプロジェクト
+          <span class="muted">（旧 PhysLean，Lean-QuantumInfo）</span></li>
+        <li><strong>物理の分野ごとに整理</strong>：古典力学，電磁気学，量子力学，相対論，場の量子論，統計力学，熱力学，物性，宇宙論，単位系，…</li>
+        <li><strong>Physlib</strong>（中核．査読を厳しく）と <strong>PhyslibAlpha</strong>（速い開発．AI が生成した大規模な貢献も受け入れる）の 2 段構え</li>
+      </ul>
+      <div class="box key info small">
+        プロジェクトの要件（README）より：<br>
+        特定の<strong>公理化（例：公理的場の量子論）に縛られない</strong>こと．異なるアプローチや出発点を受け入れられる柔軟さをもつこと．
+      </div>
+      <p class="small"><strong>なぜ物理を形式化するのか</strong>（<a href="https://physlib.io/about">physlib.io</a>）：結果を探しやすく・参照しやすくする．論文の数学的な正しさを自動で確かめる．AI による発見．理論とプログラムをつなぐ．</p>
+    </div>
+    <div>
+<pre class="xxs" data-file="Physlib/ClassicalMechanics/HarmonicOscillator/Basic.lean（抜粋）"><code class="language-lean">/-- The classical harmonic oscillator is specified by a mass `m`, and a spring
+  constant `k`. Both the mass and the string constant are assumed to be positive. -/
+structure HarmonicOscillator where
+  m : ℝ
+  k : ℝ
+  m_pos : 0 &lt; m
+  k_pos : 0 &lt; k
+
+/-- The energy of the harmonic oscillator is the kinetic energy plus
+  the potential energy. -/
+noncomputable def energy (xₜ : Time → EuclideanSpace ℝ (Fin 1)) : Time → ℝ := fun t =&gt;
+  kineticEnergy S xₜ t + potentialEnergy S (xₜ t)
+
+/-- The equation of motion for the Harmonic oscillator. -/
+def EquationOfMotion (xₜ : Time → EuclideanSpace ℝ (Fin 1)) : Prop :=
+  S.gradLagrangian xₜ = 0
+
+lemma equationOfMotion_iff_newtons_2nd_law (xₜ : Time → EuclideanSpace ℝ (Fin 1))
+    (hx : ContDiff ℝ ∞ xₜ) :
+    S.EquationOfMotion xₜ ↔
+    (∀ t, S.m • ∂ₜ (∂ₜ xₜ) t = force S (xₜ t))
+
+lemma energy_conservation_of_equationOfMotion (xₜ : Time → EuclideanSpace ℝ (Fin 1))
+    (hx : ContDiff ℝ ∞ xₜ)
+    (h : S.EquationOfMotion xₜ) : ∂ₜ (S.energy xₜ) = 0</code></pre>
+      <ul class="small">
+        <li>物理系は <code>structure</code>（$m > 0$，$k > 0$ を含む）</li>
+        <li>運動方程式は「作用の変分が 0」という<strong>命題</strong>．Newton の第 2 法則と同値であることが定理</li>
+        <li>エネルギー保存は，運動方程式を<strong>仮定</strong>した定理</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>日常の理論は非形式的．形式手法はどう使えるか</h2>
+  <p class="small">科学・工学・数学のふだんの議論は，ほとんどが<strong>非形式的</strong>である．記号の省略，「十分滑らかとする」，「同様に」，基礎づけが後から整う道具 — それで理論は速く前へ進む．
+    形式手法はこれを否定するものではない．Lean が検査するのは「仮定から結論への導出」であり，<strong>何を仮定に置くかは，使う側が決められる</strong>．</p>
+  <div class="cols">
+    <div>
+      <div class="box">
+        <h3>① 法則や未確立の対象は，仮定として明示する</h3>
+        <p class="small">対象を <code>structure</code> で，法則を命題で書き，そこからの帰結を証明する（前ページの調和振動子）．
+          基礎づけが済んでいなくても，<strong>「何を認めれば何が出るか」</strong>は厳密に検査できる．</p>
+      </div>
+      <div class="box">
+        <h3>② 厳密にできる部分から固める</h3>
+        <p class="small">有限次元・代数的な計算は完全に形式化できる．
+          例：Physlib の Lorentz 群，テンソルの添字計算，Pauli 行列，Wick の定理，アノマリー相殺条件．</p>
+      </div>
+      <div class="box">
+        <h3>③ 規約を固定する</h3>
+        <p class="small">単位系と次元，計量の符号，$2\pi$ の置き場所．定義を 1 つ決めれば，以降の定理はすべてその規約で一貫する．
+          論文ごとの規約の違いは，変換の補題として明示される．</p>
+      </div>
+    </div>
+    <div>
+      <div class="box">
+        <h3>④ 未形式化の部分は「非形式の補題」として置いておく</h3>
+<pre class="xxs" data-file="Physlib/ClassicalMechanics/RigidBody/Basic.lean（抜粋）"><code class="language-lean">/-- The kinetic energy decomposes into translational and rotational parts:
+    T = (1/2) M |V|² + (1/2) ω ⋅ I_CM ω. … -/
+informal_lemma kinetic_energy_decomposition where
+  tag := "LL32-TK"
+  deps := [``RigidBody]</code></pre>
+        <p class="small mb0">主張は自然言語のまま，依存関係（<code>deps</code>）だけを機械可読にしておく．
+          依存グラフの中で「どこが証明済みで，どこがまだか」が見える．</p>
+      </div>
+      <div class="box key info small">
+        <strong>非形式的な議論をなくすのではなく，どこが非形式的かを見えるようにする．</strong><br>
+        Lean は「この議論がどの仮定に依存しているか」を見逃さない（例：<code>[NeZero n]</code>）．
+        逆に，ジャンク値のように，Lean の主張が書き手の意図とずれることもある．そこは人間が読む．
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>Riemann 予想の Lean 証明：何が公開され，どう検査されているか</h2>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>2026 年 11 月 20 日，Levent Alpöge が Riemann 予想の証明を <strong>Lean のライブラリ</strong>として公開した（<a href="https://alpo.ge">alpo.ge</a>）</li>
+        <li><strong>175,187 モジュール，約 1,755 万行</strong>．Lean 4.33.1，直接の依存は Mathlib のみ</li>
+        <li>主定理は 5 つ．1 つ目が Riemann 予想，残りは Dirichlet の $L$ 関数についての主張</li>
+      </ul>
+<pre class="xs" data-file="Mathlib の定義"><code class="language-lean">/-- A formal statement of the **Riemann hypothesis** – constructing
+a term of this type is worth a million dollars. -/
+def RiemannHypothesis : Prop :=
+  ∀ (s : ℂ) (_ : riemannZeta s = 0) (_ : ¬∃ n : ℕ, s = -2 * (n + 1))
+    (_ : s ≠ 1), s.re = 1 / 2</code></pre>
+<pre class="s" data-file="Main.lean（公開されたライブラリ）" data-trust="untrusted"><code class="language-lean">theorem riemannHypothesis : RiemannHypothesis := rhOfAll</code></pre>
+      <p class="note">「この型の項を構成すれば 100 万ドル」．Curry–Howard 対応そのもの．
+        なお <code>s ≠ 1</code> が除外されているのは，Mathlib の <code>riemannZeta 1</code> がジャンク値だから．</p>
+    </div>
+    <div>
+<pre class="s" data-file="Challenge.lean（コミュニティが追加．Mathlib だけを import）" data-trust="trusted"><code class="language-lean">import Mathlib
+/-- The headline claim, stated with Mathlib's definition only. -/
+theorem riemannHypothesis : RiemannHypothesis := by sorry</code></pre>
+<pre class="xxs" data-file="comparator.json（抜粋）"><code class="language-json">{ "challenge_module": "Challenge", "solution_module": "Main",
+  "theorem_names": ["riemannHypothesis", "riemannZeta_eq_zero_re", … ],
+  "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"],
+  "external_kernels": {
+    "Lean paranoid": ["leanchecker-paranoid", "--silent", "--from-export"],
+    "nanoda": ["nanoda_bin"] } }</code></pre>
+      <blockquote>
+        “We hereby certify that both the statement and the proof of the Riemann Hypothesis are correct.”
+        <footer>Lean・Mathlib コミュニティの共同声明（2026-11-21．Lean FRO と Mathlib Initiative が賛同）</footer>
+      </blockquote>
+      <p class="note">声明が挙げる根拠：① 主張は Mathlib の定義で，専門家が精査済み　② ライブラリがエラーなくビルドできる　③ 証明された定理が Mathlib の主張と同一（Comparator など）　④ エクスポートした証明を，複数の独立な検査器が受理．
+        <a href="https://leanprover-community.github.io/blog/posts/riemann-hypothesis/">声明</a>　<a href="https://github.com/leanprover-community/riemann-hypothesis">leanprover-community/riemann-hypothesis</a></p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <h2>独自の検証：RIKYU と AI の使い方</h2>
+  <div class="cols c32">
+    <div>
+      <p class="small">公開されたライブラリを，我々自身でビルドし，検査した記録（<a href="https://shosonoda.github.io/lean-rh-alpoge/">レポート</a>，<a href="https://github.com/shosonoda/lean-rh-alpoge">リポジトリ</a>）．
+        実行して確認できたことだけを報告し，数学的な内容は評価しない．</p>
+      <table class="full compact">
+        <thead><tr><th>工程</th><th>内容</th><th>結果<span class="muted">（2026-11-23 版）</span></th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>lake build</code><br><span class="muted">RIKYU の 1 ノード，64 コア</span></td>
+            <td><span class="tag ok">完了</span> 終了コード 0．175,187 モジュール，エラー 0，<code>sorry</code> 0．約 6 時間 20 分</td></tr>
+          <tr><td>2</td><td>単体の Comparator v4.33.0<br><span class="muted">サンドボックス内で再ビルドから</span></td>
+            <td><span class="tag warn">未完了</span> エクスポートは 61.6 GB．メモリ約 300 GiB，単一スレッドの段階が続き，判定は出ていない</td></tr>
+          <tr><td>公式<br>手順</td><td>コミュニティの手順<br><span class="muted">2 つのエクスポートを <code>lake comparator</code>（Lean 4.36.0）で判定</span></td>
+            <td><span class="tag warn">実行中</span> エクスポートの SHA-256 は公表値と一致．nanoda：受理（1 時間 58 分）．Lean の既定カーネル：実行中</td></tr>
+          <tr><td>3</td><td>証明ネットワークの統計<br><span class="muted">独自の依存グラフ解析</span></td>
+            <td><span class="tag ok">完了</span> 定数 270 万個．5 定理が依存するのは 148 万個．公理は標準の 3 つだけ</td></tr>
+        </tbody>
+      </table>
+      <p class="note">計算資源：割り当て 64 GPU 時間（約 1.9 万円．GPU 自体は使わず，CPU とメモリを使用）．最新の状況は公開レポートを参照．</p>
+    </div>
+    <div>
+      <div class="box plain small">
+        <h3>RIKYU（理研 R-CCS の計算機）の使い方</h3>
+        <ul class="mb0">
+          <li>ビルドは並列化できる（64 スレッドで数時間）</li>
+          <li>エクスポートとカーネルの再検査は<strong>単一スレッド</strong>で<strong>数百 GB のメモリ</strong>を使う．効くのはコア数よりメモリ</li>
+          <li>制限時間のあるジョブを，途中結果を保存してつなぐ</li>
+        </ul>
+      </div>
+      <div class="box info small">
+        <h3>AI の使い方</h3>
+        <ul class="mb0">
+          <li>コーディングエージェント（Claude Code）が，ジョブの作成と投入，ログの集計，依存グラフの解析，レポートの生成までを担当</li>
+          <li>人間は方針を決め，公開する文面を確認する</li>
+        </ul>
+      </div>
+      <div class="box key small">
+        <strong>教訓</strong>：読むべき主張は数行．1,755 万行を読むのはカーネル．
+        ただし<strong>検査そのものが大規模計算</strong>になる．
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================
+     まとめ
+     ====================================================================== -->
+
+<section class="slide" data-section="まとめ">
+  <h2>まとめ</h2>
+  <div class="cols">
+    <div>
+      <h3 class="rule">形式証明の仕組み</h3>
+      <ul class="small">
+        <li>形式証明 ＝ 証明の行間を，<strong>自然演繹の推論規則だけ</strong>で埋めたもの．検査は機械的</li>
+        <li>Curry–Howard 対応：命題は型，証明は項，<strong>証明の検査は型検査</strong></li>
+        <li>タクティックは証明項を組み立てるプログラム．検査されるのは，出来上がった項</li>
+      </ul>
+      <h3 class="rule">なぜ・いつ信頼できるか</h3>
+      <ul class="small">
+        <li><strong>なぜ</strong>：信頼するのは小さなカーネルと公理と主張だけ．証明を書いた人・AI・タクティックは信頼しなくてよい</li>
+        <li><strong>いつ</strong>：主張を読み，ゼロからビルドでき，公理が標準の 3 つで，<code>lake comparator</code> と別実装のカーネルが受理したとき</li>
+        <li>機械が検査できないのは「主張が意図どおりか」．定義とジャンク値は人間が読む</li>
+      </ul>
+      <h3 class="rule">形式化の進め方</h3>
+      <ul class="small">
+        <li>AI なし：<code>lake new … math</code>．AI あり：LeanArchitect と Comparator を使うように指示して，待つ</li>
+      </ul>
+    </div>
+    <div>
+      <h3 class="rule">物理・制御の研究者にとって</h3>
+      <ul class="small">
+        <li>線形代数，解析，常微分方程式の基礎は Mathlib にある．紙の証明と同じ長さで書ける例も多い</li>
+        <li>制御理論はほぼ白紙．物理は Physlib が進行中</li>
+        <li>形式化は「すべてを厳密にする」ことではなく，<strong>何を仮定し，何を示したかを明示する</strong>こと</li>
+        <li>定理は名前ではなく<strong>主張を読む</strong></li>
+      </ul>
+      <h3 class="rule">実際の事例</h3>
+      <ul class="small">
+        <li>Mathlib：定理 29.6 万，貢献者 772 人．人間が査読するので成長は概ね線形．AI による開発は Tau Ceti，Lean Pool，Prove2Me などで進む</li>
+        <li>Lean Rademacher（汎化誤差），Lean Ridgelet（再構成公式）：形式化の過程で，隠れた仮定が明らかになり，新しい定理も得られた</li>
+        <li>FLT，Navier–Stokes，Riemann 予想：AI が書いた数万〜数十万モジュールを，<strong>Mathlib だけで書いた短い主張</strong>に対して検査する</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-section="参考資料">
+  <h2>参考資料</h2>
+  <div class="cols">
+    <ul class="small" style="font-size: .76em;">
+      <li>Lean：<a href="https://lean-lang.org/">lean-lang.org</a>　／　ブラウザで試す：<a href="https://live.lean-lang.org/">live.lean-lang.org</a></li>
+      <li>Mathlib：<a href="https://mathlib.org/">mathlib.org</a>　／　統計：<a href="https://mathlib.org/mathlib_stats.html">mathlib_stats</a></li>
+      <li>検索：<a href="https://loogle.lean-lang.org/">Loogle</a>，<a href="https://leansearch.net/">LeanSearch</a></li>
+      <li>環境構築（日本語）：<a href="https://shosonoda.github.io/lean-install/">shosonoda.github.io/lean-install</a></li>
+      <li>講義ノート（日本語）：<a href="https://shosonoda.github.io/lean-math-note/">数学系エンドユーザーのための Lean 入門</a></li>
+      <li>書籍：井上亜星『<a href="https://www.lambdanote.com/products/leanbook">ゼロから始める Lean 言語入門</a>』（ラムダノート）；
+        Avigad–Massot, <em>Mathematics in Lean</em>；Avigad ほか, <em>Theorem Proving in Lean 4</em>；<em>The Lean Language Reference</em></li>
+      <li>Comparator：<a href="https://github.com/leanprover/comparator">leanprover/comparator</a>（Lean 4.35 以降は <code>lake comparator</code>）</li>
+      <li>別実装のカーネル：<a href="https://github.com/ammkrn/nanoda_lib">nanoda</a>，<a href="https://github.com/digama0/lean4lean">lean4lean</a></li>
+      <li>健全性バグの報告と修正：Lean <a href="https://lean-lang.org/doc/reference/latest/releases/v4.32.1/">4.32.1</a>，<a href="https://lean-lang.org/doc/reference/latest/releases/v4.32.2/">4.32.2</a> のリリースノート</li>
+      <li>LeanArchitect：<a href="https://github.com/hanwenzhu/LeanArchitect">hanwenzhu/LeanArchitect</a>　／　<a href="https://github.com/PatrickMassot/leanblueprint">leanblueprint</a></li>
+      <li>ひな形：<a href="https://github.com/shosonoda/temp-lean-architect">shosonoda/temp-lean-architect</a></li>
+      <li>園田「数学における AI の理論と実践」，第 96 回産総研人工知能セミナー，2026 年 8 月</li>
+    </ul>
+    <ul class="small" style="font-size: .76em;">
+      <li>AI による開発：<a href="https://github.com/TauCetiProject/TauCeti">Tau Ceti</a>（<a href="https://lean-lang.org/use-cases/tau-ceti">紹介</a>），
+        <a href="https://github.com/LeanPool/lean-pool">Lean Pool</a>（arXiv:2609.25199），
+        <a href="https://prove2.me">Prove2Me</a>（arXiv:2608.28433）</li>
+      <li>Lean Rademacher：<a href="https://github.com/auto-res/lean-rademacher">auto-res/lean-rademacher</a>（arXiv:2503.19605）</li>
+      <li>Lean Ridgelet：<a href="https://github.com/shosonoda/lean-ridgelet">shosonoda/lean-ridgelet</a>　／　<a href="https://shosonoda.github.io/lean-ridgelet/blueprint/html-multi/">blueprint</a><br>
+        無限次元への拡張：<a href="https://github.com/shosonoda/lean-operator-ridgelet">shosonoda/lean-operator-ridgelet</a></li>
+      <li>Fermat の最終定理：<a href="https://github.com/anthropics/fermats-last-theorem">anthropics/fermats-last-theorem</a></li>
+      <li>Navier–Stokes と Euler：<a href="https://github.com/openai/NavierStokesAndEuler">openai/NavierStokesAndEuler</a></li>
+      <li>Formal Conjectures：<a href="https://github.com/google-deepmind/formal-conjectures">google-deepmind/formal-conjectures</a></li>
+      <li>Physlib：<a href="https://physlib.io/">physlib.io</a>　／　<a href="https://github.com/leanprover-community/physlib">leanprover-community/physlib</a></li>
+      <li>Riemann 予想
+        <ul>
+          <li>公開元：<a href="https://alpo.ge">alpo.ge</a></li>
+          <li>コミュニティの声明：<a href="https://leanprover-community.github.io/blog/posts/riemann-hypothesis/">Lean verification of the Riemann Hypothesis</a></li>
+          <li>コミュニティの検査手順：<a href="https://github.com/leanprover-community/riemann-hypothesis">leanprover-community/riemann-hypothesis</a></li>
+          <li>独自の検証：<a href="https://shosonoda.github.io/lean-rh-alpoge/">shosonoda.github.io/lean-rh-alpoge</a></li>
+        </ul>
+      </li>
+      <li class="muted">動作確認：スライド中の Lean コードは Lean 4.36.0 / Mathlib v4.36.0（2026-11-23）</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+<script src="deck/katex/katex.min.js"></script>
+<script src="deck/katex/auto-render.min.js"></script>
+<script src="deck/highlight.js"></script>
+<script src="deck/deck.js"></script>
+</body>
+</html>
