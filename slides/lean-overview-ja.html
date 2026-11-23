@@ -883,9 +883,10 @@ theorem add_even' (m n : ℕ) (hm : IsEven m) (hn : IsEven n) :
       <table class="full compact">
         <thead><tr><th>タクティック</th><th>埋める行間</th></tr></thead>
         <tbody>
-          <tr><td><code>intro</code>，<code>apply</code>，<code>exact</code>，<code>obtain</code></td><td>推論規則 1 つ分</td></tr>
-          <tr><td><code>rw</code>，<code>simp</code></td><td>等式による書き換えの列</td></tr>
-          <tr><td><code>ring</code>，<code>omega</code>，<code>linarith</code></td><td>計算（数十〜数万ステップ）</td></tr>
+          <tr><td class="nowrap"><code>intro</code>，<code>apply</code>，<code>exact</code>，<code>obtain</code></td><td>推論規則 1 つ分</td></tr>
+          <tr><td class="nowrap"><code>rw</code>，<code>simp</code></td><td>等式による書き換えの列</td></tr>
+          <tr><td class="nowrap"><code>ring</code>，<code>omega</code>，<code>linarith</code></td><td>計算（数十〜数万ステップ）</td></tr>
+          <tr><td class="nowrap"><code>aesop</code>，<code>grind</code></td><td>探索：補題の適用，<br>場合分け，等式の推論</td></tr>
         </tbody>
       </table>
     </div>
