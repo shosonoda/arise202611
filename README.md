@@ -59,6 +59,9 @@ PDF にするには，ブラウザの印刷から「PDF に保存」を選びま
   - `<pre data-hl="2,4-6">` で行を強調，`<pre data-file="ファイル名">` で見出しを付けられます．
   - 「コピー」ボタンは自動で付きます．付けたくないブロックは `<pre data-nocopy>` とします．
   - 見出しや文中でも `<code class="language-bash">…</code>` のように書けば色が付きます．
+- 証明図（Gentzen 式の横線）は `<div class="ptree">` の中に `<div class="pt">` を入れ子にして書きます．
+  前提の `.pt` を先に，結論 `<span class="f">$…$</span>` と規則名 `<span class="r">…</span>` を後に置くと，
+  式の幅に合わせて自動で配置されます（書き方は `deck.js` の `layoutProofTrees` のコメント）．
 - 数式は `$…$` と `$$…$$`．数式の中の `<` は `\lt` と書きます．
 - 箱は `<div class="box">`（`info`，`ok`，`ng`，`warn`，`trust`，`untrust`，`plain`，`key` で色を変える）．
 - スライドは 1280×720 px の固定サイズです．内容がはみ出すと，一覧表示（`O`）でそのスライドに
@@ -66,17 +69,18 @@ PDF にするには，ブラウザの印刷から「PDF に保存」を選びま
 
 ## 内容
 
-1. **形式証明の仕組み** — 証明の行間を埋める，自然演繹の推論規則と数学での言い回し，
-   推論規則だけで書いた証明（計算機は要らない），Curry–Howard 対応，命題と証明＝集合と要素，タクティック
-2. **Lean の仕組み** — 定義・定理・証明の書き方（`theorem 名前 仮定 : 結論 := 証明項`，`structure`，型クラス），
-   対話的な証明，型と項，Π 型と Σ 型，Lean の内部（構文解析・精密化・型検査），用語の整理，単一化，
-   定義的等価と外延性
-3. **なぜ・いつ信頼できるか** — カーネルと公理，「コンパイルが通った」の意味，ジャンク値，
+1. **Lean で何ができるか** — Lean とは，例（6 は偶数），対話的な証明，形式化の利点，どこまで形式化できるか
+2. **形式証明の仕組み** — 証明の行間を埋める，自然演繹の推論規則と数学での言い回し，
+   推論規則だけで書いた証明図（計算機は要らない），型と項，Curry–Howard 対応，命題と証明＝集合と要素，
+   タクティック，推論規則とタクティックの対応
+3. **Lean の仕組み** — 定理と定義の書き方（`theorem 名前 仮定 : 結論 := 証明項`，`structure`，型クラス），
+   Π 型と Σ 型，Lean の内部（構文解析・精密化・型検査），用語の整理，単一化，定義的等価と外延性
+4. **なぜ・いつ信頼できるか** — カーネルと公理，型理論の無矛盾性（CIC と集合論），「コンパイルが通った」の意味，ジャンク値，
    `lake comparator`，確認の手順
-4. **AI を使わない形式化** — 環境構築，`lake new my_project math`，日々の作業，Mathlib の読み方
-5. **AI を使った形式化** — LeanArchitect と Comparator を使うように指示して待つ
-6. **具体例** — 物理数学（正準交換関係，分配関数，Fourier 変換），制御理論（Lyapunov 関数，Mathlib にある道具）
-7. **実際の形式化事例** — Mathlib と AI による開発（Tau Ceti，Lean Pool，Prove2Me），Lean Rademacher，
+5. **AI を使わない形式化** — 環境構築，`lake new my_project math`，日々の作業，Mathlib の読み方
+6. **AI を使った形式化** — LeanArchitect と Comparator を使うように指示して待つ
+7. **具体例** — 物理数学（正準交換関係，分配関数，Fourier 変換），制御理論（Lyapunov 関数，Mathlib にある道具）
+8. **実際の形式化事例** — Mathlib と AI による開発（Tau Ceti，Lean Pool，Prove2Me），Lean Rademacher，
    Lean Ridgelet，Fermat の最終定理，Navier–Stokes と Euler，Physlib，Riemann 予想の Lean 証明の検証
 
 ## 動作確認したバージョン

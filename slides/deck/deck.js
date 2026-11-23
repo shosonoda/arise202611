@@ -146,9 +146,80 @@
     }
     return bad;
   }
+  /* ---- 証明図（Gentzen 式の横線） ----
+     <div class="ptree">
+       <div class="pt">                                           ← 1 回の推論．前提（.pt）を先に書く
+         <div class="pt"><span class="f">$…$</span></div>          ← 横線のない葉（仮定）
+         <div class="pt"> … </div>
+         <span class="f">$…$</span><span class="r">$\to I$</span>  ← 結論と，規則の名前
+       </div>
+     </div>
+     前提が無く .r だけがある .pt は，前提のない規則（公理，= 導入）として横線を引く．
+     式の幅を測って置くので，全スライドが表示されている状態（deckCheckOverflow の中）で呼ぶ．
+  */
+  function layoutProofTrees() {
+    $('.ptree').forEach(function (tree) {
+      var top = tree.querySelector(':scope > .pt');
+      if (!top || !tree.offsetParent) return;
+      $('.bar', tree).forEach(function (b) { b.parentNode.removeChild(b); });
+      var em = parseFloat(getComputedStyle(tree).fontSize);
+      var GAP = 1.5 * em;      // 隣り合う部分木の間隔
+      var PITCH = 2.05 * em;   // 1 段の高さ
+      var LINE = 1.6 * em;     // 結論の下端から横線まで
+      var PAD = 0.3 * em;      // 横線が式からはみ出す長さ，横線と規則名の間
+      function build(node, level) {
+        var kids = Array.prototype.filter.call(node.children, function (c) { return c.classList.contains('pt'); });
+        var f = node.querySelector(':scope > .f'), r = node.querySelector(':scope > .r');
+        var fw = f.offsetWidth, rw = r ? r.offsetWidth + PAD : 0;
+        var L = [], R = [], items = [], a = 0, b = fw;   // [a, b]：前提の結論が並ぶ範囲
+        kids.forEach(function (k, i) {
+          var s = build(k, level + 1), off = i ? -Infinity : 0, j;
+          // 各段で左隣とぶつからないところまで寄せる（上の段が広い部分木の下に，葉が入り込める）
+          if (i > 0) for (j = 0; j < s.L.length && j < R.length; j++) off = Math.max(off, R[j] + GAP - s.L[j]);
+          for (j = 0; j < s.L.length; j++) {
+            L[j] = L[j] === undefined ? off + s.L[j] : Math.min(L[j], off + s.L[j]);
+            R[j] = R[j] === undefined ? off + s.R[j] : Math.max(R[j], off + s.R[j]);
+          }
+          s.items.forEach(function (it) { it.x += off; items.push(it); });
+          if (i === 0) a = off + s.fl;
+          b = off + s.fr;
+        });
+        var c = (a + b) / 2, fl = c - fw / 2, fr = c + fw / 2;
+        var l0 = fl, r0 = fr;
+        items.push({ el: f, x: fl, level: level });
+        if (kids.length || r) {
+          var bl = Math.min(a, fl) - PAD, br = Math.max(b, fr) + PAD;
+          items.push({ bar: true, x: bl, w: br - bl, level: level });
+          if (r) items.push({ el: r, x: br + PAD, level: level, label: true });
+          l0 = bl; r0 = br + rw;
+          // 横線と規則名は，1 つ上の段にも場所をとる
+          L[0] = L[0] === undefined ? l0 : Math.min(L[0], l0);
+          R[0] = R[0] === undefined ? r0 : Math.max(R[0], r0);
+        }
+        return { L: [l0].concat(L), R: [r0].concat(R), fl: fl, fr: fr, items: items };
+      }
+      var res = build(top, 0);
+      var minL = Math.min.apply(null, res.L), maxR = Math.max.apply(null, res.R);
+      tree.style.width = Math.ceil(maxR - minL) + 'px';
+      tree.style.height = Math.ceil((res.L.length - 1) * PITCH + 1.4 * em) + 'px';
+      res.items.forEach(function (it) {
+        var el = it.el;
+        if (it.bar) {
+          el = document.createElement('div'); el.className = 'bar';
+          el.style.width = it.w + 'px';
+          tree.appendChild(el);
+        }
+        el.style.left = (it.x - minL) + 'px';
+        el.style.bottom = (it.level * PITCH + (it.bar ? LINE : it.label ? LINE - el.offsetHeight / 2 : 0)) + 'px';
+      });
+      tree.classList.add('laid');
+    });
+  }
+
   window.deckCheckOverflow = function () {
     var was = document.body.className;
     document.body.classList.remove('present'); document.body.classList.add('overview');
+    layoutProofTrees();
     var bad = checkOverflow();
     document.body.classList.add('measuring');   // 一覧モードでは隠しているボタンを，測る間だけ出す
     placeCopy();
@@ -356,6 +427,12 @@
     document.addEventListener('touchend', onTouchEnd, { passive: true });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { window.deckCheckOverflow(); });
     else setTimeout(window.deckCheckOverflow, 500);
+    // 数式のフォントは，そのスライドが初めて表示されたときに読み込まれる．読み終えたら測り直す
+    var again = 0;
+    if (document.fonts && document.fonts.addEventListener) {
+      document.fonts.addEventListener('loadingdone', function () { if (again++ < 8) window.deckCheckOverflow(); });
+    }
+    window.addEventListener('beforeprint', function () { window.deckCheckOverflow(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
