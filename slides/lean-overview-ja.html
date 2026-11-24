@@ -971,7 +971,7 @@ theorem add_even' (m n : ℕ) (hm : IsEven m) (hn : IsEven n) :
     <div class="arrow"><small>構文解析<br>parse</small>→</div>
     <div class="node">構文木<br><b>Syntax</b><br><span class="tiny muted">まだ意味はない</span></div>
     <div class="arrow"><small>精密化<br>elaboration</small>→</div>
-    <div class="node trust">核言語の項<br><b>Expr</b><br><span class="tiny muted">すべてが明示された項</span></div>
+    <div class="node trust">コア言語の項<br><b>Expr</b><br><span class="tiny muted">すべてが明示された項</span></div>
     <div class="arrow"><small>型検査<br>kernel</small>→</div>
     <div class="node ok">環境に登録<br><b>.olean</b><br><span class="tiny muted">他のファイルから import できる</span></div>
   </div>
@@ -979,12 +979,12 @@ theorem add_even' (m n : ℕ) (hm : IsEven m) (hn : IsEven n) :
     <div>
       <div class="box untrust small">
         <h3>精密化（エラボレータ）<span class="tag untrust">大きい・拡張できる・信頼しない</span></h3>
-        人間が省略したものをすべて補って，核言語の項を作る：<br>
+        人間が省略したものをすべて補って，コア言語の項を作る：<br>
         マクロ展開，<strong>型推論</strong>，<strong>単一化</strong>，型クラスの解決，暗黙の引数，型強制，<strong>タクティクの実行</strong>
       </div>
       <div class="box trust small">
         <h3>カーネル<span class="tag trust">小さい・信頼する</span></h3>
-        核言語の項だけを見て<strong>型検査</strong>する．必要に応じて<strong>正規化</strong>して，2 つの項が等しいかを判定する．
+        コア言語の項だけを見て<strong>型検査</strong>する．必要に応じて<strong>正規化</strong>して，2 つの項が等しいかを判定する．
         タクティクにバグがあって誤った項ができても，ここで拒否される．
       </div>
     </div>
@@ -1194,7 +1194,7 @@ example : (fun n : ℕ =&gt; 0 + n) = (fun n =&gt; n) := by
       <div class="box trust">
         <h3>信頼するもの <span class="tag trust">小さい</span></h3>
         <ul class="small mb0">
-          <li><strong>カーネル</strong>：核言語の型検査器．小さく，独立した実装が複数ある</li>
+          <li><strong>カーネル</strong>：コア言語の型検査器．小さく，独立した実装が複数ある</li>
           <li><strong>公理</strong>：Mathlib の証明が使うのは通常，右の 3 つだけ</li>
           <li><strong>定理の主張</strong>と，そこに現れる定義<span class="muted">（人間が読む）</span></li>
           <li><strong>論理（型理論）そのもの</strong><span class="muted">（無矛盾性は次ページ）</span></li>
