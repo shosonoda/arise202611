@@ -36,8 +36,9 @@
   <h1>Leanによる形式数学入門</h1>
   <div class="subtitle">他人が書いた Lean の証明はなぜ信じられるか</div>
   <div class="author">園田 翔</div>
-  <div class="affil">理化学研究所 AIP ／ サイバーエージェント</div>
-  <div class="date">v2026.11.23</div>
+  <div class="affil">理化学研究所 ／ サイバーエージェント</div>
+  <div class="date">v2026.11.24 ARiSE AI4MP kickoff MTG</div>
+  <div class="url"><a href="https://shosonoda.github.io/arise202611/">https://shosonoda.github.io/arise202611/</a></div>
 </section>
 
 <section class="slide">
@@ -1283,42 +1284,41 @@ example : (fun n : ℕ =&gt; 0 + n) = (fun n =&gt; n) := by
 
 <section class="slide">
   <h2>「コンパイルが通った」ら安心か</h2>
-  <div class="cols">
-    <div>
-      <div class="box ng">
-        <h3>仕様のバグ：主張が，意図したものと違う</h3>
-        <ul class="small mb0">
-          <li><strong>ジャンク値</strong>：<code>x / 0 = 0</code>．微分できない点で <code>deriv f x = 0</code>．可積分でなければ <code>∫ f = 0</code>．非有界なら <code>⨆ i, f i = 0</code></li>
-          <li>仮定が空虚（<code>0 &lt; 0</code> など），あるいは結論と同じくらい強い</li>
-          <li>定義が，標準的なものと食い違っている</li>
-        </ul>
-      </div>
-      <div class="box warn">
-        <h3>実装のバグ：証明が，本当は証明になっていない</h3>
-        <ul class="small mb0">
-          <li><code>sorry</code><span class="muted">（未証明の部分）</span>，新しい <code>axiom</code><span class="muted">（前提の追加）</span></li>
-          <li><code>native_decide</code>，<code>bv_decide</code>：コンパイルしたコードの実行結果を，公理として足す．コンパイラを信頼することになる<span class="muted">（<code>#print axioms</code> に現れる）</span></li>
-          <li><code>implemented_by</code>，<code>unsafe</code>：コンパイルされるコードを，定義とは別のものに差し替える</li>
-          <li>カーネルのバグ</li>
-        </ul>
-      </div>
-    </div>
-    <div>
-      <table class="full">
-        <thead><tr><th>心配</th><th>道具</th></tr></thead>
-        <tbody>
-          <tr><td>どの公理に依存？</td><td><code>#print axioms</code></td></tr>
-          <tr><td><code>sorry</code> は残っていない？</td><td>ビルド時の警告．<code>#print axioms</code> に <code>sorryAx</code></td></tr>
-          <tr><td>カーネルのバグ？</td><td>別実装のカーネルで再検査（<strong>nanoda</strong> など）</td></tr>
-          <tr><td>主張がすり替わっていない？</td><td><strong>Comparator</strong>：<em>信頼できる</em>主張と比較する</td></tr>
-          <tr><td>主張の意味は正しい？</td><td><strong>blueprint</strong>（LeanArchitect）：LaTeX と Lean を並べて，人間が読む</td></tr>
-        </tbody>
-      </table>
-      <div class="box key info small">
-        Comparator と blueprint は，AI に形式化を任せるときに「必ず使うように」と指示する 2 つの道具．
-      </div>
-    </div>
-  </div>
+  <table class="full check bugs">
+    <thead><tr><th style="width: 49%;">バグ</th><th>対応方法</th><th>検出するもの</th></tr></thead>
+    <tbody>
+      <tr class="grp ng"><td>仕様のバグ：主張が，意図したものと違う</td><td colspan="2">人間が主張を読む．<strong>blueprint</strong> で LaTeX と Lean を並べる</td></tr>
+      <tr><td><strong>ジャンク値</strong>：<code>x / 0 = 0</code>．微分できない点で <code>deriv f x = 0</code>．<br>可積分でなければ <code>∫ f = 0</code>．非有界なら <code>⨆ i, f i = 0</code></td>
+        <td>主張に <code>Integrable</code>，<code>BddAbove</code> などの<br>仮定があるかを読む<span class="muted">（次ページ）</span></td>
+        <td class="who"><strong>人間</strong></td></tr>
+      <tr><td><strong>型強制</strong>：<code>(1 - 3 : ℕ) = 0</code>．<code>↑(n - 1)</code> と <code>↑n - 1</code> は別の値</td>
+        <td><code>↑</code> の位置と，計算に使っている型を読む</td>
+        <td class="who"><strong>人間</strong></td></tr>
+      <tr><td>仮定が空虚（<code>0 &lt; 0</code> など），あるいは結論と同じくらい強い</td>
+        <td>仮定を読む．仮定を満たす具体例を Lean で構成させる</td>
+        <td class="who"><strong>人間</strong></td></tr>
+      <tr><td>定義が，標準的なものと食い違っている</td>
+        <td>Mathlib の定義を使う．自前の定義は論文と見比べる</td>
+        <td class="who"><strong>人間</strong></td></tr>
+      <tr><td>主張が，頼んだものからすり替わっている</td>
+        <td><em>信頼できる</em>主張を用意して，比較する</td>
+        <td class="who">Comparator</td></tr>
+      <tr class="grp warn"><td>実装のバグ：証明が，本当は証明になっていない</td><td colspan="2">機械が検出する</td></tr>
+      <tr><td><code>sorry</code><span class="muted">（未証明の部分）</span>，新しい <code>axiom</code><span class="muted">（前提の追加）</span></td>
+        <td>ビルド時の警告（<code>sorry</code>）と <code>#print axioms</code> に現れる．<br>Comparator は，許可した公理以外を拒否する</td>
+        <td class="who">Lean，Comparator</td></tr>
+      <tr><td><code>native_decide</code>，<code>bv_decide</code>：コンパイルしたコードの実行結果を，<br>公理として足す<span class="muted">（コンパイラを信頼することになる）</span></td>
+        <td>公理として現れるので，上と同じ</td>
+        <td class="who">Lean，Comparator</td></tr>
+      <tr><td><code>implemented_by</code>，<code>unsafe</code>：コンパイルされるコードを，<br>定義とは別のものに差し替える</td>
+        <td>証明に効くのは <code>native_decide</code> などを通るときだけ．<br>上と同じ</td>
+        <td class="who">Lean，Comparator</td></tr>
+      <tr><td>カーネルのバグ</td>
+        <td>別実装のカーネルで再検査する（<strong>nanoda</strong> など）</td>
+        <td class="who">外部の検査器</td></tr>
+    </tbody>
+  </table>
+  <div class="box key info small">Comparator と blueprint は，AI に形式化を任せるときに「必ず使うように」と指示する 2 つの道具．</div>
 </section>
 
 <section class="slide">

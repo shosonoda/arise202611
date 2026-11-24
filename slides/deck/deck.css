@@ -198,6 +198,7 @@ body.overview #progress { display: none; }
 .slide.title .subtitle { font-size: 27px; color: var(--ink-2); margin-bottom: 44px; }
 .slide.title .author { font-size: 25px; margin-bottom: 6px; }
 .slide.title .affil, .slide.title .date { font-size: 20px; color: var(--ink-2); }
+.slide.title .url { font-size: 20px; margin-top: 18px; }
 .slide.divider { background: linear-gradient(135deg, #f3f7fe 0%, #ffffff 60%); }
 .slide.divider .num { font-size: 96px; font-weight: 700; color: var(--accent); opacity: .22; line-height: 1; }
 .slide.divider h2 { font-size: 46px; margin: 4px 0 14px 0; }
@@ -629,6 +630,12 @@ svg .halo { paint-order: stroke; stroke: #fff; stroke-width: 5px; stroke-linejoi
 /* 確認の手順（番号つきの表） */
 .slide table.check td.no { width: 30px; text-align: center; font-weight: 700; color: var(--accent); }
 .slide table.check td.who { white-space: nowrap; }
+
+/* バグと対応方法（群見出しつきの表） */
+.slide table.bugs { font-size: .72em; }
+.slide table.bugs tr.grp td:first-child { font-weight: 700; }
+.slide table.bugs tr.grp.ng td { background: var(--ng-soft); }
+.slide table.bugs tr.grp.warn td { background: var(--warn-soft); }
 
 /* --------------------------------------------------------------------------
    印刷（ブラウザの「PDF に保存」）：1 スライド = 1 ページ
